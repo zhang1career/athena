@@ -62,6 +62,20 @@ def update_run_status(
     return run
 
 
+def update_run_params(run_id: Union[str, int], **kwargs) -> Optional[ExperimentRun]:
+    """Merge key-value pairs into run.params (e.g. workflow_phase, ai_suggestions)."""
+    run = ExperimentRun.objects.filter(run_id=_run_id_int(run_id)).first()
+    if not run:
+        return None
+    params = dict(run.params or {})
+    for k, v in kwargs.items():
+        if v is not None:
+            params[k] = v
+    run.params = params
+    run.save()
+    return run
+
+
 def get_run(run_id: Union[str, int]) -> Optional[ExperimentRun]:
     return ExperimentRun.objects.filter(run_id=_run_id_int(run_id)).first()
 

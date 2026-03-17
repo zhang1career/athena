@@ -9,6 +9,16 @@
   <p class="text-gray-600">胜平负预测、数据管理、策略实验</p>
 </div>
 
+<div class="card mb-6 border-l-4 border-l-green-500">
+  <div class="card-body">
+    <h3 class="text-lg font-semibold mb-2">一轮预测流程</h3>
+    <p class="text-gray-600 text-sm mb-3">点击后由 AI 判断是否具备运行条件（数据、配置等）；若通过则执行：获取数据 → 运行预测 → 对比结果 → AI 给出改进意见；人工在实验详情页确认后执行改进。若未通过则返回报错与改进建议。流程状态在「实验管理」列表中查看。</p>
+    <button type="button" id="btn-start-round" class="btn btn-primary">启动一轮预测</button>
+    <div id="start-round-error" class="mt-3 hidden"></div>
+    <div id="start-round-suggestion" class="mt-2 text-sm text-blue-600 hidden"></div>
+  </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
   <div class="card">
     <div class="card-body">
@@ -62,13 +72,13 @@ const API = '/api/v1/experiments';
 const WC_STRATEGY_IDS = 'lightgbm_match,elo_baseline';
 
 function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function cancelExperiment(runId) {
-  if (!confirm('确认取消该实验？')) return;
-  fetch(API + '/' + runId + '/cancel', { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' }, credentials: 'same-origin' })
+function deleteExperiment(runId) {
+  if (!confirm('确认删除该实验记录？此操作不可恢复。')) return;
+  fetch(API + '/' + runId, { method: 'DELETE', headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' }, credentials: 'same-origin' })
     .then(r => r.json()).then(j => {
-      if (j.errorCode === 0) { if (typeof showToast === 'function') showToast('已取消', 'success'); loadExperiments(); }
-      else alert(j.message || '取消失败');
-    }).catch(e => alert('取消失败: ' + e.message));
+      if (j.errorCode === 0) { if (typeof showToast === 'function') showToast('已删除', 'success'); loadExperiments(); }
+      else alert(j.message || '删除失败');
+    }).catch(e => alert('删除失败: ' + e.message));
 }
 
 async function loadExperiments() {
@@ -80,20 +90,22 @@ async function loadExperiments() {
     const items = (j.data && j.data.data) || [];
     const total = (j.data && j.data.total) || 0;
     if (items.length > 0) {
-      let h = '<table class="data-table"><thead><tr><th>run_id</th><th>名称</th><th>策略</th><th>状态</th><th>指标</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+      let h = '<table class="data-table"><thead><tr><th>run_id</th><th>名称</th><th>策略</th><th>状态</th><th>阶段</th><th>指标</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
       items.forEach(x => {
         const metrics = x.metrics && typeof x.metrics === 'object' ? JSON.stringify(x.metrics).slice(0, 80) : '-';
         const statusClass = x.status === 'SUCCESS' ? 'badge-success' : x.status === 'RUNNING' ? 'badge-running' : 'badge-warning';
         const detailUrl = '/console/experiments/' + x.run_id + '/';
         const nameDisplay = x.name || x.run_id || '-';
+        const phaseLabel = x.workflow_phase_label || '-';
         h += `<tr>
           <td class="text-gray-500">${escapeHtml(x.run_id)}</td>
           ${listTitleCell(nameDisplay, detailUrl)}
           <td>${escapeHtml(x.strategy_id || '-')}</td>
           <td><span class="badge ${statusClass}">${escapeHtml(x.status)}</span></td>
+          <td class="text-xs">${escapeHtml(phaseLabel)}</td>
           <td class="text-xs">${escapeHtml(metrics)}</td>
           <td>${escapeHtml(x.created_at ? x.created_at.slice(0, 19) : '-')}</td>
-          ${listActions({ id: x.run_id, onDelete: 'cancelExperiment' })}
+          ${listActions({ id: x.run_id, onDelete: 'deleteExperiment' })}
         </tr>`;
       });
       h += '</tbody></table>';
@@ -123,5 +135,45 @@ document.getElementById('btn-create').onclick = function() {
 };
 
 loadExperiments();
+
+document.getElementById('btn-start-round').onclick = function() {
+  var btn = this;
+  var errEl = document.getElementById('start-round-error');
+  var sugEl = document.getElementById('start-round-suggestion');
+  errEl.classList.add('hidden');
+  sugEl.classList.add('hidden');
+  btn.disabled = true;
+  fetch('/api/v1/research/start-prediction-round', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
+    body: JSON.stringify({ application: 'worldcup' }),
+    credentials: 'same-origin'
+  }).then(function(r) { return r.json(); }).then(function(j) {
+    btn.disabled = false;
+    if (j.errorCode !== 0) {
+      errEl.textContent = j.message || '启动失败';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    var d = j.data || {};
+    if (d.error) {
+      errEl.innerHTML = '<span class="text-amber-600">' + escapeHtml(d.error) + '</span>';
+      errEl.classList.remove('hidden');
+      if (d.suggestion) {
+        sugEl.innerHTML = '<strong>建议：</strong> ' + escapeHtml(d.suggestion);
+        sugEl.classList.remove('hidden');
+      }
+      return;
+    }
+    if (d.run_id) {
+      if (typeof showToast === 'function') showToast('已创建一轮预测 run_id: ' + d.run_id + '，请到实验管理查看进度', 'success');
+      loadExperiments();
+    }
+  }).catch(function(e) {
+    btn.disabled = false;
+    errEl.textContent = '请求失败: ' + escapeHtml(e.message);
+    errEl.classList.remove('hidden');
+  });
+};
 </script>
 {% endblock %}

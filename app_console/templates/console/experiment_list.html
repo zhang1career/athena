@@ -25,13 +25,13 @@
 <script>
 const API = '/api/v1/experiments';
 function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function cancelExperiment(runId) {
-  if (!confirm('确认取消该实验？')) return;
-  fetch(API + '/' + runId + '/cancel', { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' }, credentials: 'same-origin' })
+function deleteExperiment(runId) {
+  if (!confirm('确认删除该实验记录？此操作不可恢复。')) return;
+  fetch(API + '/' + runId, { method: 'DELETE', headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' }, credentials: 'same-origin' })
     .then(r => r.json()).then(j => {
-      if (j.errorCode === 0) { if (typeof showToast === 'function') showToast('已取消', 'success'); loadExperiments(); }
-      else alert(j.message || '取消失败');
-    }).catch(e => alert('取消失败: ' + e.message));
+      if (j.errorCode === 0) { if (typeof showToast === 'function') showToast('已删除', 'success'); loadExperiments(); }
+      else alert(j.message || '删除失败');
+    }).catch(e => alert('删除失败: ' + e.message));
 }
 async function loadExperiments() {
   const el = document.getElementById('experiment-list');
@@ -42,20 +42,22 @@ async function loadExperiments() {
     const items = (j.data && j.data.data) || [];
     const total = (j.data && j.data.total) || 0;
     if (items.length > 0) {
-      let h = '<table class="data-table"><thead><tr><th>run_id</th><th>名称</th><th>策略</th><th>状态</th><th>指标</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+      let h = '<table class="data-table"><thead><tr><th>run_id</th><th>名称</th><th>策略</th><th>状态</th><th>阶段</th><th>指标</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
       items.forEach(x => {
         const metrics = x.metrics && typeof x.metrics === 'object' ? JSON.stringify(x.metrics).slice(0, 80) : '-';
         const statusClass = x.status === 'SUCCESS' ? 'badge-success' : x.status === 'RUNNING' ? 'badge-running' : 'badge-warning';
         const detailUrl = '/console/experiments/' + x.run_id + '/';
         const nameDisplay = x.name || x.run_id || '-';
+        const phaseLabel = x.workflow_phase_label || '-';
         h += `<tr>
           <td class="text-gray-500">${escapeHtml(x.run_id)}</td>
           ${listTitleCell(nameDisplay, detailUrl)}
           <td>${escapeHtml(x.strategy_id || '-')}</td>
           <td><span class="badge ${statusClass}">${escapeHtml(x.status)}</span></td>
+          <td class="text-xs">${escapeHtml(phaseLabel)}</td>
           <td class="text-xs">${escapeHtml(metrics)}</td>
           <td>${escapeHtml(x.created_at ? x.created_at.slice(0, 19) : '-')}</td>
-          ${listActions({ id: x.run_id, onDelete: 'cancelExperiment' })}
+          ${listActions({ id: x.run_id, onDelete: 'deleteExperiment' })}
         </tr>`;
       });
       h += '</tbody></table>';

@@ -17,37 +17,19 @@ from platform_app.repos.experiment_repo import (
     get_run,
     list_runs,
 )
-from platform_core.experiment.runner import LocalRunner, ExperimentConfig
+from platform_app.services.prediction_round import (
+    confirm_and_apply_improvements,
+    get_workflow_phase_label,
+)
+from platform_core.experiment.runner import ExperimentConfig
+from platform_app.services.experiment_runner import get_runner
 
 logger = logging.getLogger(__name__)
-
-def _resolve_data_loader(data_config: dict):
-    """Use worldcup loader if path given, else mock."""
-    if data_config.get("path") or data_config.get("data_path"):
-        try:
-            from applications.worldcup.data.loader import worldcup_data_loader
-            return lambda cfg: worldcup_data_loader(cfg)
-        except ImportError:
-            pass
-    # Mock loader
-    def _mock(cfg):
-        import numpy as np
-        n = cfg.get("n_samples", 200)
-        X = np.random.randn(n, 5)
-        y = (X[:, 0] > 0).astype(int)
-        t1, t2 = int(n * 0.7), int(n * 0.85)
-        return X[:t1], y[:t1], X[t1:t2], y[t1:t2], X[t2:], y[t2:]
-    return _mock
-
-
-def _get_runner(data_config: dict):
-    loader = _resolve_data_loader(data_config or {})
-    return LocalRunner(loader)
 
 
 def _run_experiment_async(run_id: int, config: ExperimentConfig):
     try:
-        runner = _get_runner(config.data_config)
+        runner = get_runner(config.data_config)
         result = runner.run(config)
         update_run_status(
             run_id,
@@ -112,17 +94,20 @@ class ExperimentListCreateView(APIView):
                 limit=limit, offset=offset, status=status,
                 strategy_id=strategy_id, strategy_ids=strategy_ids,
             )
-            data = [
-                {
+            data = []
+            for r in items:
+                params = r.params or {}
+                workflow_phase = params.get("workflow_phase")
+                data.append({
                     "run_id": r.run_id,
                     "name": r.name,
                     "strategy_id": r.strategy_id,
                     "status": r.status_label,
                     "metrics": r.metrics,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
-                }
-                for r in items
-            ]
+                    "workflow_phase": workflow_phase,
+                    "workflow_phase_label": get_workflow_phase_label(workflow_phase),
+                })
             return resp_ok({"data": data, "total": total})
         except Exception as e:
             logger.exception("List experiments failed: %s", e)
@@ -130,12 +115,14 @@ class ExperimentListCreateView(APIView):
 
 
 class ExperimentDetailView(APIView):
-    """GET /api/v1/experiments/{run_id} - detail; POST .../cancel - cancel."""
+    """GET /api/v1/experiments/{run_id} - detail; DELETE - delete record."""
 
     def get(self, request: Request, run_id: int):
         run = get_run(run_id)
         if not run:
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        params = run.params or {}
+        workflow_phase = params.get("workflow_phase")
         return resp_ok({
             "run_id": run.run_id,
             "name": run.name,
@@ -147,7 +134,18 @@ class ExperimentDetailView(APIView):
             "artifacts": run.artifacts,
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "error_message": run.error_message,
+            "workflow_phase": workflow_phase,
+            "workflow_phase_label": get_workflow_phase_label(workflow_phase),
+            "ai_suggestions": params.get("ai_suggestions"),
         })
+
+    def delete(self, request: Request, run_id: int):
+        """DELETE /api/v1/experiments/{run_id} - delete experiment record."""
+        run = get_run(run_id)
+        if not run:
+            return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        run.delete()
+        return resp_ok({"run_id": run_id, "deleted": True})
 
 
 class ExperimentCancelView(APIView):
@@ -160,3 +158,20 @@ class ExperimentCancelView(APIView):
         if run.status == ExperimentRun.Status.RUNNING:
             update_run_status(run_id, "CANCELLED")
         return resp_ok({"run_id": run_id, "status": "CANCELLED"})
+
+
+class ExperimentConfirmImprovementsView(APIView):
+    """POST /api/v1/experiments/{run_id}/confirm-improvements — 人工确认后执行改进"""
+
+    def post(self, request: Request, run_id: int):
+        run = get_run(run_id)
+        if not run:
+            return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        try:
+            out = confirm_and_apply_improvements(run_id)
+            if out.get("error"):
+                return resp_err(out["error"], code=RET_INVALID_PARAM)
+            return resp_ok(out)
+        except Exception as e:
+            logger.exception("Confirm improvements failed: %s", e)
+            return resp_exception(e)

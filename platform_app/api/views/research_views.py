@@ -1,4 +1,4 @@
-"""AI Research Loop: POST /api/v1/research/propose"""
+"""AI Research Loop: propose experiment; GET recommendations (data requirements)."""
 import logging
 import threading
 
@@ -11,9 +11,10 @@ from common.utils.http_util import resp_ok, resp_err, resp_exception
 from common.consts.response_const import RET_INVALID_PARAM
 
 from platform_app.repos.experiment_repo import create_run, update_run_status
-from platform_core.experiment.runner import LocalRunner, ExperimentConfig
-
-from platform_app.api.views.experiment_views import _get_runner
+from platform_core.experiment.runner import ExperimentConfig
+from platform_app.services.experiment_runner import get_runner
+from platform_app.services.ai_recommendations import get_recommendations
+from platform_app.services.prediction_round import start_prediction_round
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ class ResearchProposeView(APIView):
                 params=params,
                 data_config=data_config,
             )
-            runner = _get_runner(data_config)
+            runner = get_runner(data_config)
 
             def run_async():
                 try:
@@ -71,4 +72,42 @@ class ResearchProposeView(APIView):
             return resp_ok({"run_id": run_id, "status": "PENDING"})
         except Exception as e:
             logger.exception("Research propose failed: %s", e)
+            return resp_exception(e)
+
+
+class ResearchRecommendationsView(APIView):
+    """
+    GET /api/v1/research/recommendations?application=worldcup
+
+    AI 根据应用与策略上下文生成数据需求与运行建议（如「需要最近20年的足球数据」）。
+    返回自然语言 message 与可选的 requirements 结构。
+    """
+
+    def get(self, request: Request):
+        application = request.GET.get("application", "worldcup").strip() or "worldcup"
+        try:
+            out = get_recommendations(application=application)
+            return resp_ok(out)
+        except Exception as e:
+            logger.exception("Research recommendations failed: %s", e)
+            return resp_exception(e)
+
+
+class StartPredictionRoundView(APIView):
+    """
+    POST /api/v1/research/start-prediction-round
+
+    启动一轮预测流程：先由 AI 判断是否缺少数据/配置等；通过则执行预测流程，否则返回 error + suggestion。
+    请求体可选: {"application": "worldcup"}。
+    成功返回 data: {run_id, status}；失败返回 data: {error, suggestion}，前端展示报错与建议。
+    """
+
+    def post(self, request: Request):
+        try:
+            data = getattr(request, "data", None) or {}
+            application = (data if isinstance(data, dict) else {}).get("application", "worldcup")
+            out = start_prediction_round(application=application)
+            return resp_ok(out)
+        except Exception as e:
+            logger.exception("Start prediction round failed: %s", e)
             return resp_exception(e)
