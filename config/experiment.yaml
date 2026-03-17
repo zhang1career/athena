@@ -1,0 +1,8 @@
+# Experiment-level Hydra config
+name: unnamed
+strategy_id: sklearn_rf
+params: {}
+data_config:
+  train_ratio: 0.7
+  val_ratio: 0.15
+  n_samples: 200

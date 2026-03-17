@@ -1,0 +1,127 @@
+{% extends 'console/base.html' %}
+{% load static console_static %}
+{% block title %}世界杯预测{% endblock %}
+{% block page_title %}世界杯预测{% endblock %}
+{% block content %}
+{% csrf_token %}
+<div class="mb-6">
+  <h2 class="text-2xl font-bold text-gray-800 mb-2">⚽ 足球世界杯预测</h2>
+  <p class="text-gray-600">胜平负预测、数据管理、策略实验</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+  <div class="card">
+    <div class="card-body">
+      <h3 class="text-lg font-semibold mb-2">数据概况</h3>
+      <p class="text-gray-600 text-sm mb-2">数据源由配置文件定义（CSV/JSON/API）</p>
+      <p class="font-mono text-xs text-gray-500">applications/worldcup/config/</p>
+      <p class="text-xs text-gray-500 mt-2">config/data_sources.yaml</p>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h3 class="text-lg font-semibold mb-2">可用策略</h3>
+      <ul class="text-sm text-gray-600 space-y-1">
+        <li>• lightgbm_match</li>
+        <li>• elo_baseline</li>
+      </ul>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h3 class="text-lg font-semibold mb-2">快速操作</h3>
+      <select id="strategy-select" class="border border-gray-300 rounded px-3 py-2 text-sm mb-2 w-full">
+        <option value="lightgbm_match">lightgbm_match</option>
+        <option value="elo_baseline">elo_baseline</option>
+      </select>
+      <button id="btn-create" class="btn btn-primary w-full">新建实验</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold">世界杯预测实验</h2>
+    <a href="{% url 'console:experiment-list' %}" class="text-blue-600 text-sm hover:underline">查看全部实验 →</a>
+  </div>
+  <div class="card-body p-0">
+    <div id="worldcup-experiment-list">
+      <div class="p-8 text-center text-gray-500">
+        <div class="spinner"></div>
+        <p class="mt-2">加载中...</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{% static_ver 'console/js/list-actions.js' %}"></script>
+<script src="{% static_ver 'console/js/main.js' %}"></script>
+<script>
+const API = '/api/v1/experiments';
+const WC_STRATEGY_IDS = 'lightgbm_match,elo_baseline';
+
+function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function cancelExperiment(runId) {
+  if (!confirm('确认取消该实验？')) return;
+  fetch(API + '/' + runId + '/cancel', { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' }, credentials: 'same-origin' })
+    .then(r => r.json()).then(j => {
+      if (j.errorCode === 0) { if (typeof showToast === 'function') showToast('已取消', 'success'); loadExperiments(); }
+      else alert(j.message || '取消失败');
+    }).catch(e => alert('取消失败: ' + e.message));
+}
+
+async function loadExperiments() {
+  const el = document.getElementById('worldcup-experiment-list');
+  try {
+    const r = await fetch(API + '?limit=50&strategy_ids=' + encodeURIComponent(WC_STRATEGY_IDS));
+    const j = await r.json();
+    if (j.errorCode !== 0) throw new Error(j.message || '加载失败');
+    const items = (j.data && j.data.data) || [];
+    const total = (j.data && j.data.total) || 0;
+    if (items.length > 0) {
+      let h = '<table class="data-table"><thead><tr><th>run_id</th><th>名称</th><th>策略</th><th>状态</th><th>指标</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
+      items.forEach(x => {
+        const metrics = x.metrics && typeof x.metrics === 'object' ? JSON.stringify(x.metrics).slice(0, 80) : '-';
+        const statusClass = x.status === 'SUCCESS' ? 'badge-success' : x.status === 'RUNNING' ? 'badge-running' : 'badge-warning';
+        const detailUrl = '/console/experiments/' + x.run_id + '/';
+        const nameDisplay = x.name || x.run_id || '-';
+        h += `<tr>
+          <td class="text-gray-500">${escapeHtml(x.run_id)}</td>
+          ${listTitleCell(nameDisplay, detailUrl)}
+          <td>${escapeHtml(x.strategy_id || '-')}</td>
+          <td><span class="badge ${statusClass}">${escapeHtml(x.status)}</span></td>
+          <td class="text-xs">${escapeHtml(metrics)}</td>
+          <td>${escapeHtml(x.created_at ? x.created_at.slice(0, 19) : '-')}</td>
+          ${listActions({ id: x.run_id, onDelete: 'cancelExperiment' })}
+        </tr>`;
+      });
+      h += '</tbody></table>';
+      if (total > items.length) h += `<p class="px-4 py-2 text-sm text-gray-500">共 ${total} 条（仅展示世界杯相关策略）</p>`;
+      el.innerHTML = h;
+    } else {
+      el.innerHTML = '<div class="empty-state"><p>暂无世界杯预测实验</p><p class="text-sm mt-2">点击上方「新建实验」创建</p></div>';
+    }
+  } catch (e) {
+    el.innerHTML = '<div class="p-8 text-center text-red-500">加载失败: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+document.getElementById('btn-create').onclick = function() {
+  const strategyId = document.getElementById('strategy-select').value;
+  fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
+    body: JSON.stringify({ name: '世界杯预测实验', strategy_id: strategyId }),
+    credentials: 'same-origin'
+  }).then(r => r.json()).then(j => {
+    if (j.errorCode === 0) {
+      if (typeof showToast === 'function') showToast('已创建 run_id: ' + j.data.run_id, 'success');
+      loadExperiments();
+    } else alert(j.message || '创建失败');
+  }).catch(e => alert('创建失败: ' + e.message));
+};
+
+loadExperiments();
+</script>
+{% endblock %}

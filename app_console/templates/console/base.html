@@ -1,0 +1,68 @@
+{% load static console_static %}
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}控制台{% endblock %} - Athena</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{% static_ver 'console/css/style.css' %}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="min-h-screen text-sm">
+<div class="flex h-screen overflow-hidden">
+    <aside class="w-64 bg-gray-800 text-white flex flex-col">
+        <div class="h-16 flex items-center justify-center border-b border-gray-700">
+            <span class="text-xl font-bold">Athena</span>
+        </div>
+        <nav class="flex-1 py-4 px-3">
+            <ul class="space-y-1">
+                <li>
+                    <a href="{% url 'console:dashboard' %}"
+                       class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 {% if request.resolver_match.url_name == 'dashboard' %}bg-gray-700{% endif %}">
+                        <span class="ml-3">仪表盘</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'console:experiment-list' %}"
+                       class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 {% if 'experiment' in request.path %}bg-gray-700{% endif %}">
+                        <span class="ml-3">实验管理</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'console:experiment-compare' %}"
+                       class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700">
+                        <span class="ml-3">指标对比</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'console:strategy-list' %}"
+                       class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 {% if 'strategies' in request.path %}bg-gray-700{% endif %}">
+                        <span class="ml-3">策略列表</span>
+                    </a>
+                </li>
+                <li>
+                    <div class="px-4 py-2 mt-2 text-gray-400 text-xs font-medium uppercase tracking-wider">应用</div>
+                    <ul class="space-y-0.5">
+                        <li>
+                            <a href="{% url 'console:worldcup-app' %}"
+                               class="flex items-center px-4 py-2.5 rounded-lg hover:bg-gray-700 pl-8 {% if 'worldcup' in request.path %}bg-gray-700{% endif %}">
+                                <span>世界杯预测</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+        </nav>
+    </aside>
+    <main class="flex-1 overflow-y-auto">
+        <header class="h-16 bg-white shadow-sm flex items-center px-6">
+            <h1 class="text-xl font-semibold text-gray-800">{% block page_title %}控制台{% endblock %}</h1>
+        </header>
+        <div class="p-4">{% block content %}{% endblock %}</div>
+    </main>
+</div>
+<div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+{% block extra_js %}{% endblock %}
+</body>
+</html>

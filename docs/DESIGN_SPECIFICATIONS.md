@@ -170,7 +170,7 @@ class ExperimentRun(Model):
     params = JSONField()
     status = CharField()
     metrics = JSONField()
-    parent_run_id = ForeignKey('self', null=True)
+    parent_id = ForeignKey('self', null=True)
     created_at = DateTimeField()
 
 class ExperimentMetric(Model):

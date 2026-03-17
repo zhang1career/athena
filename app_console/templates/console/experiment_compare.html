@@ -1,0 +1,43 @@
+{% extends 'console/base.html' %}
+{% block title %}指标对比{% endblock %}
+{% block page_title %}指标对比{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-body">
+    <p class="text-gray-600 mb-4">选择多个实验进行指标对比。输入 run_id 以逗号分隔：</p>
+    <input type="text" id="run-ids" placeholder="run_id1, run_id2, run_id3" class="border rounded px-3 py-2 w-full max-w-md mb-4">
+    <button id="btn-compare" class="btn btn-primary">对比</button>
+    <div id="compare-result" class="mt-6"></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+document.getElementById('btn-compare').onclick = async function() {
+  const ids = document.getElementById('run-ids').value.split(',').map(s => s.trim()).filter(Boolean);
+  if (ids.length === 0) { alert('请输入至少一个 run_id'); return; }
+  const el = document.getElementById('compare-result');
+  el.innerHTML = '<div class="spinner"></div> 加载中...';
+  const rows = [];
+  for (const id of ids) {
+    try {
+      const r = await fetch('/api/v1/experiments/' + id);
+      const j = await r.json();
+      if (j.errorCode === 0 && j.data) rows.push({ run_id: id, ...j.data });
+      else rows.push({ run_id: id, error: j.message });
+    } catch (e) { rows.push({ run_id: id, error: e.message }); }
+  }
+  const allKeys = new Set();
+  rows.forEach(row => { if (row.metrics) Object.keys(row.metrics).forEach(k => allKeys.add(k)); });
+  const keys = Array.from(allKeys);
+  let h = '<table class="data-table"><thead><tr><th>run_id</th><th>status</th>' + keys.map(k => '<th>' + k + '</th>').join('') + '</tr></thead><tbody>';
+  rows.forEach(row => {
+    h += '<tr><td>' + row.run_id + '</td><td>' + (row.status || '-') + '</td>';
+    keys.forEach(k => h += '<td>' + (row.metrics && row.metrics[k] != null ? row.metrics[k] : '-') + '</td>');
+    h += '</tr>';
+  });
+  h += '</tbody></table>';
+  el.innerHTML = h;
+};
+</script>
+{% endblock %}

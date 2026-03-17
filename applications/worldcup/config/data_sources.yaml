@@ -1,0 +1,28 @@
+# 足球世界杯数据源配置
+# 设计流程：人设计需求 → AI 辅助设计方案 → AI 实现获取逻辑
+#
+# 人设计：定义 MatchRecord 所需字段、更新频率、质量要求
+# AI 辅助：推荐数据源、字段映射、ETL 流程
+# AI 实现：实现各 type 对应的 Loader
+
+sources:
+  - id: local_csv
+    type: file
+    path: "data/worldcup/matches.csv"
+    format: csv
+    description: 本地 CSV 文件
+    # AI 根据 MatchRecord schema 生成 field_mapping（若列名不同）
+
+  - id: local_json
+    type: file
+    path: "data/worldcup/matches.json"
+    format: json
+    description: 本地 JSON 文件
+
+  # 扩展示例：API 数据源（AI 实现时添加对应 Loader）
+  # - id: football_data_org
+  #   type: api
+  #   endpoint: "https://api.football-data.org/v4/..."
+  #   field_mapping:
+  #     homeTeam: home_team
+  #     awayTeam: away_team

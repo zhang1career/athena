@@ -1,0 +1,44 @@
+{% extends 'console/base.html' %}
+{% load static %}
+{% block title %}策略列表{% endblock %}
+{% block page_title %}策略列表{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="card-body p-0">
+    <div id="strategy-list">
+      <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+fetch('/api/v1/strategies')
+  .then(r => r.json())
+  .then(j => {
+    const el = document.getElementById('strategy-list');
+    if (j.errorCode !== 0) { el.innerHTML = '<p class="p-4 text-red-500">' + (j.message || '加载失败') + '</p>'; return; }
+    const items = (j.data && j.data.data) || [];
+    if (items.length > 0) {
+      let h = '<table class="data-table"><thead><tr><th>ID</th><th>名称</th><th>版本</th><th>params_schema</th></tr></thead><tbody>';
+      items.forEach(x => {
+        const schema = JSON.stringify(x.params_schema || {}).slice(0, 120) + (JSON.stringify(x.params_schema || {}).length > 120 ? '...' : '');
+        h += `<tr>
+          <td class="font-mono">${escapeHtml(x.id)}</td>
+          <td>${escapeHtml(x.name)}</td>
+          <td>${escapeHtml(x.version)}</td>
+          <td class="text-xs">${escapeHtml(schema)}</td>
+        </tr>`;
+      });
+      h += '</tbody></table>';
+      el.innerHTML = h;
+    } else {
+      el.innerHTML = '<div class="empty-state p-8"><p>暂无注册策略</p></div>';
+    }
+  })
+  .catch(e => {
+    document.getElementById('strategy-list').innerHTML = '<p class="p-4 text-red-500">加载失败: ' + e.message + '</p>';
+  });
+</script>
+{% endblock %}

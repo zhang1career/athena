@@ -1,0 +1,48 @@
+{% extends 'console/base.html' %}
+{% load static %}
+{% block title %}实验详情{% endblock %}
+{% block page_title %}实验详情 - {{ run_id }}{% endblock %}
+{% block content %}
+<div class="mb-4">
+  <a href="/console/experiments/" class="text-blue-600 hover:underline">← 返回实验管理</a>
+</div>
+<div id="detail-content" class="space-y-4">
+  <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const runId = '{{ run_id }}';
+fetch('/api/v1/experiments/' + runId)
+  .then(r => r.json())
+  .then(j => {
+    const el = document.getElementById('detail-content');
+    if (j.errorCode !== 0) { el.innerHTML = '<p class="text-red-500">' + (j.message || '加载失败') + '</p>'; return; }
+    const d = j.data;
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3 class="font-semibold">基本信息</h3></div>
+        <div class="card-body">
+          <p><strong>run_id:</strong> ${d.run_id}</p>
+          <p><strong>名称:</strong> ${d.name || '-'}</p>
+          <p><strong>策略:</strong> ${d.strategy_id || '-'}</p>
+          <p><strong>状态:</strong> <span class="badge badge-${d.status === 'SUCCESS' ? 'success' : 'warning'}">${d.status}</span></p>
+          <p><strong>创建时间:</strong> ${d.created_at || '-'}</p>
+          ${d.error_message ? '<p class="text-red-600"><strong>错误:</strong> ' + d.error_message + '</p>' : ''}
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3 class="font-semibold">参数</h3></div>
+        <div class="card-body"><pre class="text-sm overflow-x-auto">${JSON.stringify(d.params || {}, null, 2)}</pre></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3 class="font-semibold">指标</h3></div>
+        <div class="card-body"><pre class="text-sm overflow-x-auto">${JSON.stringify(d.metrics || {}, null, 2)}</pre></div>
+      </div>
+    `;
+  })
+  .catch(e => {
+    document.getElementById('detail-content').innerHTML = '<p class="text-red-500">加载失败: ' + e.message + '</p>';
+  });
+</script>
+{% endblock %}

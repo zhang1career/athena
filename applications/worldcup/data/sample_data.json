@@ -1,0 +1,12 @@
+[
+  {"match_id": "m1", "home_team": "A", "away_team": "B", "date": "2024-01-01", "league": "WC", "result": "1", "home_goals": 2, "away_goals": 1, "f1": 1.2, "f2": 0.8, "f3": 0.5, "f4": 0.3, "f5": 0.9},
+  {"match_id": "m2", "home_team": "C", "away_team": "D", "date": "2024-01-02", "league": "WC", "result": "X", "home_goals": 1, "away_goals": 1, "f1": 0.5, "f2": 0.5, "f3": 0.4, "f4": 0.6, "f5": 0.5},
+  {"match_id": "m3", "home_team": "E", "away_team": "F", "date": "2024-01-03", "league": "WC", "result": "2", "home_goals": 0, "away_goals": 2, "f1": 0.3, "f2": 1.2, "f3": 0.2, "f4": 0.8, "f5": 0.4},
+  {"match_id": "m4", "home_team": "G", "away_team": "H", "date": "2024-01-04", "league": "WC", "result": "1", "home_goals": 3, "away_goals": 1, "f1": 1.5, "f2": 0.4, "f3": 0.7, "f4": 0.2, "f5": 1.0},
+  {"match_id": "m5", "home_team": "I", "away_team": "J", "date": "2024-01-05", "league": "WC", "result": "X", "home_goals": 0, "away_goals": 0, "f1": 0.4, "f2": 0.4, "f3": 0.3, "f4": 0.5, "f5": 0.3},
+  {"match_id": "m6", "home_team": "K", "away_team": "L", "date": "2024-01-06", "league": "WC", "result": "2", "home_goals": 1, "away_goals": 2, "f1": 0.2, "f2": 1.1, "f3": 0.1, "f4": 0.9, "f5": 0.2},
+  {"match_id": "m7", "home_team": "M", "away_team": "N", "date": "2024-01-07", "league": "WC", "result": "1", "home_goals": 2, "away_goals": 0, "f1": 1.1, "f2": 0.3, "f3": 0.6, "f4": 0.4, "f5": 0.8},
+  {"match_id": "m8", "home_team": "O", "away_team": "P", "date": "2024-01-08", "league": "WC", "result": "X", "home_goals": 1, "away_goals": 1, "f1": 0.6, "f2": 0.6, "f3": 0.5, "f4": 0.5, "f5": 0.6},
+  {"match_id": "m9", "home_team": "Q", "away_team": "R", "date": "2024-01-09", "league": "WC", "result": "2", "home_goals": 0, "away_goals": 1, "f1": 0.3, "f2": 0.9, "f3": 0.2, "f4": 0.7, "f5": 0.3},
+  {"match_id": "m10", "home_team": "S", "away_team": "T", "date": "2024-01-10", "league": "WC", "result": "1", "home_goals": 2, "away_goals": 1, "f1": 1.0, "f2": 0.7, "f3": 0.5, "f4": 0.3, "f5": 0.9}
+]
