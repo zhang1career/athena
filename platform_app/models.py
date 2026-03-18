@@ -7,7 +7,7 @@ from .fields import JSONTextField
 
 
 class ExperimentRun(models.Model):
-    """Experiment run record."""
+    """Experiment run record. 使用 id 作为主键，parent_id 指向父记录的 id。"""
 
     class Status(models.IntegerChoices):
         PENDING = 0, "Pending"
@@ -16,7 +16,6 @@ class ExperimentRun(models.Model):
         FAILED = 3, "Failed"
         CANCELLED = 4, "Cancelled"
 
-    run_id = models.BigIntegerField(unique=True, db_index=True)
     name = models.CharField(max_length=255)
     strategy_id = models.CharField(max_length=128)
     params = JSONTextField(default=dict, json_type=dict)
@@ -24,7 +23,8 @@ class ExperimentRun(models.Model):
     status = models.SmallIntegerField(
         choices=Status.choices, default=Status.PENDING, db_index=True
     )
-    parent_id = models.PositiveBigIntegerField(default=0, db_column="parent_id")
+    parent_id = models.PositiveBigIntegerField(default=0, db_column="parent_id", help_text="父记录的 id，0 表示无父记录")
+    v = models.PositiveBigIntegerField(default=0, db_column="v", help_text="数据版本号，用于复现")
     metrics = JSONTextField(default=dict, json_type=dict)
     artifacts = JSONTextField(default=list, json_type=list)
     ct = models.PositiveBigIntegerField(default=0, db_column="ct")
@@ -78,7 +78,7 @@ class ExperimentRun(models.Model):
             return "UNKNOWN"
 
     def __str__(self):
-        return f"{self.run_id} ({self.status_label})"
+        return f"{self.id} ({self.status_label})"
 
 
 class ExperimentMetric(models.Model):
@@ -97,3 +97,100 @@ class ExperimentMetric(models.Model):
         indexes = [
             models.Index(fields=["run", "name"]),
         ]
+
+
+class FormatType:
+    """数据文件格式枚举，format_type 字段存枚举 id。"""
+    JSON = 1
+    CSV = 2
+
+
+class DataSrc(models.Model):
+    """数据源的元信息。"""
+
+    name = models.CharField(max_length=255, default="")
+    src_url = models.CharField(max_length=1024, default="")
+    dest_path = models.CharField(max_length=512, default="")
+    ct = models.PositiveBigIntegerField(default=0, db_column="ct")
+    ut = models.PositiveBigIntegerField(default=0, db_column="ut")
+
+    class Meta:
+        db_table = "data_src"
+        ordering = ["-ct"]
+        app_label = "platform_app"
+
+    def save(self, *args, **kwargs):
+        now = int(time.time())
+        if not self.pk and self.ct == 0:
+            self.ct = now
+        self.ut = now
+        super().save(*args, **kwargs)
+
+
+class DataFile(models.Model):
+    """全量数据元信息，数据存于 data_src 所指文件。版本由 ct 提供。"""
+
+    data_src = models.ForeignKey(
+        DataSrc,
+        on_delete=models.PROTECT,
+        related_name="files",
+    )
+    format_type = models.SmallIntegerField(default=FormatType.JSON)
+    ct = models.PositiveBigIntegerField(default=0, db_column="ct", help_text="创建时间(unix)，作为版本号")
+
+    class Meta:
+        db_table = "data_file"
+        ordering = ["-ct"]
+        app_label = "platform_app"
+        indexes = [
+            models.Index(fields=["ct"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        now = int(time.time())
+        if not self.pk and self.ct == 0:
+            self.ct = now
+        super().save(*args, **kwargs)
+
+
+class DataPatchBatch(models.Model):
+    """增量补丁批次，ct 作为版本信息。"""
+
+    ct = models.PositiveBigIntegerField(default=0, db_column="ct", help_text="创建时间(unix)，作为版本号")
+
+    class Meta:
+        db_table = "data_patch_batch"
+        ordering = ["-ct"]
+        app_label = "platform_app"
+        indexes = [
+            models.Index(fields=["ct"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        now = int(time.time())
+        if not self.pk and self.ct == 0:
+            self.ct = now
+        super().save(*args, **kwargs)
+
+
+class DataPatch(models.Model):
+    """增量补丁 key-value 记录，通过 batch_id 关联批次。"""
+
+    batch = models.ForeignKey(
+        DataPatchBatch,
+        on_delete=models.CASCADE,
+        related_name="patches",
+    )
+    name = models.CharField(max_length=255, db_index=True)
+    value = JSONTextField(default=dict, json_type=dict)
+
+    class Meta:
+        db_table = "data_patch"
+        ordering = ["id"]
+        app_label = "platform_app"
+        indexes = [
+            models.Index(fields=["batch", "name"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)

@@ -4,6 +4,8 @@ from app_console.views import (
     ExperimentListView,
     ExperimentDetailView,
     StrategyListView,
+    DataSrcListView,
+    DataSrcDetailView,
     ExperimentCompareView,
     WorldCupAppView,
 )
@@ -15,6 +17,8 @@ urlpatterns = [
     path("apps/worldcup/", WorldCupAppView.as_view(), name="worldcup-app"),
     path("experiments/", ExperimentListView.as_view(), name="experiment-list"),
     path("experiments/compare/", ExperimentCompareView.as_view(), name="experiment-compare"),
-    path("experiments/<int:run_id>/", ExperimentDetailView.as_view(), name="experiment-detail"),
+    path("experiments/<int:pk>/", ExperimentDetailView.as_view(), name="experiment-detail"),
     path("strategies/", StrategyListView.as_view(), name="strategy-list"),
+    path("data-srcs/", DataSrcListView.as_view(), name="data-src-list"),
+    path("data-srcs/<int:pk>/", DataSrcDetailView.as_view(), name="data-src-detail"),
 ]

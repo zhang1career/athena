@@ -1,0 +1,174 @@
+{% extends 'console/base.html' %}
+{% load static console_static %}
+{% block title %}数据源{% endblock %}
+{% block page_title %}数据源{% endblock %}
+{% block content %}
+{% csrf_token %}
+<div class="card">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold">数据源管理</h2>
+    <button type="button" id="btn-add" class="btn btn-primary btn-sm">+ 新增数据源</button>
+  </div>
+  <div class="card-body p-0">
+    <div id="data-src-list">
+      <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-edit" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
+    <h3 class="text-lg font-semibold mb-4" id="modal-title">新增数据源</h3>
+    <div class="space-y-3">
+      <label class="block text-sm font-medium text-gray-700">名称</label>
+      <input id="modal-name" type="text" class="border border-gray-300 rounded px-3 py-2 w-full" placeholder="数据源名称" />
+      <label class="block text-sm font-medium text-gray-700">数据源地址 src_url</label>
+      <input id="modal-src-url" type="text" class="border border-gray-300 rounded px-3 py-2 w-full" placeholder="data/worldcup/matches.json 或 http(s)://..." />
+      <label class="block text-sm font-medium text-gray-700">保存路径 dest_path</label>
+      <input id="modal-dest-path" type="text" class="border border-gray-300 rounded px-3 py-2 w-full" placeholder="data/worldcup/generated/composed，完整路径为 dest_path-version" />
+    </div>
+    <div class="mt-6 flex justify-end gap-2">
+      <button type="button" id="modal-cancel" class="btn btn-outline">取消</button>
+      <button type="button" id="modal-save" class="btn btn-primary">保存</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{% static_ver 'console/js/list-actions.js' %}"></script>
+<script>
+(function() {
+  if (typeof listIdCell === 'undefined') {
+    window.listIdCell = function(id, detailUrl) {
+      var display = (id != null && id !== '') ? String(id) : '-';
+      var escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      var escapedUrl = String(detailUrl || '').replace(/"/g, '&quot;');
+      return '<td class="font-mono text-gray-500"><a href="' + escapedUrl + '" class="text-blue-600 hover:underline cursor-pointer">' + escaped + '</a></td>';
+    };
+  }
+  if (typeof listPlainCell === 'undefined') {
+    window.listPlainCell = function(text) {
+      var display = (text != null && String(text).trim() !== '') ? String(text).trim() : '-';
+      var escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      return '<td class="font-medium">' + escaped + '</td>';
+    };
+  }
+})();
+function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+const API = '/api/v1/data-srcs';
+
+function editDataSrc(id) {
+  fetch(API + '/' + id, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      if (j.errorCode !== 0) { alert(j.message || '加载失败'); return; }
+      const d = j.data || {};
+      openModal(id, d.name || '', d.src_url || '', d.dest_path || '');
+    })
+    .catch(e => alert('加载失败: ' + e.message));
+}
+
+function loadList() {
+  const el = document.getElementById('data-src-list');
+  fetch(API, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      if (j.errorCode !== 0) { el.innerHTML = '<p class="p-4 text-red-500">' + (j.message || '加载失败') + '</p>'; return; }
+      const items = (j.data && j.data.data_srcs) || [];
+      if (items.length > 0) {
+        let h = '<table class="data-table"><thead><tr><th>ID</th><th>名称</th><th>src_url</th><th>dest_path</th><th>ct</th><th>ut</th><th>操作</th></tr></thead><tbody>';
+        items.forEach(x => {
+          const url = escapeHtml(x.src_url).slice(0, 60) + (x.src_url && x.src_url.length > 60 ? '...' : '');
+          const dest = escapeHtml(x.dest_path || '').slice(0, 40) + ((x.dest_path || '').length > 40 ? '...' : '');
+          const detailUrl = '/console/data-srcs/' + x.id + '/';
+          const hasName = x.name && x.name.trim();
+          const nameCell = hasName ? (window.listPlainCell || listPlainCell)(x.name.trim()) : '<td class="font-medium"></td>';
+          h += `<tr>
+            ${(window.listIdCell || listIdCell)(x.id, detailUrl)}
+            ${nameCell}
+            <td class="text-xs" title="${escapeHtml(x.src_url)}">${url}</td>
+            <td class="text-xs" title="${escapeHtml(x.dest_path || '')}">${dest || '-'}</td>
+            <td>${escapeHtml(x.ct)}</td>
+            <td>${escapeHtml(x.ut)}</td>
+            ${listActions({ id: x.id, onEdit: 'editDataSrc', onDelete: 'doDelete' })}
+          </tr>`;
+        });
+        h += '</tbody></table>';
+        el.innerHTML = h;
+      } else {
+        el.innerHTML = '<div class="empty-state p-8"><p>暂无数据源</p><p class="text-sm mt-2">点击「新增数据源」添加</p></div>';
+      }
+    })
+    .catch(e => {
+      el.innerHTML = '<p class="p-4 text-red-500">加载失败: ' + escapeHtml(e.message) + '</p>';
+    })
+    .then(function() {
+      var match = /[?&]edit=(\d+)/.exec(window.location.search);
+      if (match) { editDataSrc(parseInt(match[1], 10)); history.replaceState(null, '', window.location.pathname); }
+    });
+}
+
+function openModal(id, name, url, destPath) {
+  const modal = document.getElementById('modal-edit');
+  const title = document.getElementById('modal-title');
+  document.getElementById('modal-name').value = name || '';
+  document.getElementById('modal-src-url').value = url || '';
+  document.getElementById('modal-dest-path').value = destPath || '';
+  modal.dataset.editId = id !== undefined && id > 0 ? String(id) : '';
+  title.textContent = modal.dataset.editId ? '编辑数据源' : '新增数据源';
+  modal.classList.remove('hidden');
+  document.getElementById('modal-name').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal-edit').classList.add('hidden');
+}
+
+function doSave() {
+  const modal = document.getElementById('modal-edit');
+  const editId = modal.dataset.editId;
+  const name = document.getElementById('modal-name').value.trim();
+  const srcUrl = document.getElementById('modal-src-url').value.trim();
+  const destPath = document.getElementById('modal-dest-path').value.trim();
+  if (!srcUrl) { alert('请输入数据源地址'); return; }
+  const isEdit = editId && editId !== '0';
+  const url = isEdit ? API + '/' + editId : API;
+  const method = isEdit ? 'PUT' : 'POST';
+  const payload = { name: name, src_url: srcUrl, dest_path: destPath };
+  const body = JSON.stringify(payload);
+  fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
+    body,
+    credentials: 'same-origin'
+  }).then(r => r.json()).then(j => {
+    if (j.errorCode === 0) {
+      if (typeof showToast === 'function') showToast(isEdit ? '已更新' : '已创建', 'success');
+      closeModal();
+      loadList();
+    } else alert(j.message || '保存失败');
+  }).catch(e => alert('请求失败: ' + e.message));
+}
+
+function doDelete(id) {
+  if (!confirm('确认删除该数据源？')) return;
+  fetch(API + '/' + id, {
+    method: 'DELETE',
+    headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
+    credentials: 'same-origin'
+  }).then(r => r.json()).then(j => {
+    if (j.errorCode === 0) {
+      if (typeof showToast === 'function') showToast('已删除', 'success');
+      loadList();
+    } else alert(j.message || '删除失败');
+  }).catch(e => alert('删除失败: ' + e.message));
+}
+
+document.getElementById('btn-add').onclick = () => openModal(null, '', '', '');
+document.getElementById('modal-cancel').onclick = closeModal;
+document.getElementById('modal-save').onclick = doSave;
+document.getElementById('modal-edit').onclick = function(e) { if (e.target === this) closeModal(); };
+
+loadList();
+</script>
+{% endblock %}

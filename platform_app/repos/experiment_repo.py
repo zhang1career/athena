@@ -14,31 +14,31 @@ def _status_to_int(status: Union[str, int]) -> int:
         return ExperimentRun.Status.PENDING
 
 
-def _run_id_int(v) -> int:
-    """Normalize run_id to int."""
+def _pk_int(v) -> int:
+    """Normalize pk (id) to int."""
     if v is None:
-        raise ValueError("run_id required")
+        raise ValueError("id required")
     return int(v)
 
 
 def create_run(
-    run_id: int,
     name: str,
     strategy_id: str,
     params: dict,
     data_config: dict,
-    parent_run_id: Optional[int] = None,
+    parent_id: Optional[int] = None,
+    v: int = 0,
 ) -> ExperimentRun:
     parent = None
-    if parent_run_id is not None and parent_run_id != 0:
-        parent = ExperimentRun.objects.filter(run_id=int(parent_run_id)).first()
+    if parent_id is not None and parent_id != 0:
+        parent = ExperimentRun.objects.filter(pk=_pk_int(parent_id)).first()
     run = ExperimentRun.objects.create(
-        run_id=run_id,
         name=name,
         strategy_id=strategy_id,
         params=params,
         data_config=data_config,
         parent_id=parent.id if parent else 0,
+        v=v,
         status=ExperimentRun.Status.RUNNING,
     )
     return run
@@ -50,7 +50,7 @@ def update_run_status(
     metrics: dict = None,
     error_message: str = "",
 ):
-    run = ExperimentRun.objects.filter(run_id=_run_id_int(run_id)).first()
+    run = ExperimentRun.objects.filter(pk=_pk_int(run_id)).first()
     if not run:
         return None
     run.status = _status_to_int(status)
@@ -64,7 +64,7 @@ def update_run_status(
 
 def update_run_params(run_id: Union[str, int], **kwargs) -> Optional[ExperimentRun]:
     """Merge key-value pairs into run.params (e.g. workflow_phase, ai_suggestions)."""
-    run = ExperimentRun.objects.filter(run_id=_run_id_int(run_id)).first()
+    run = ExperimentRun.objects.filter(pk=_pk_int(run_id)).first()
     if not run:
         return None
     params = dict(run.params or {})
@@ -77,7 +77,7 @@ def update_run_params(run_id: Union[str, int], **kwargs) -> Optional[ExperimentR
 
 
 def get_run(run_id: Union[str, int]) -> Optional[ExperimentRun]:
-    return ExperimentRun.objects.filter(run_id=_run_id_int(run_id)).first()
+    return ExperimentRun.objects.filter(pk=_pk_int(run_id)).first()
 
 
 def list_runs(

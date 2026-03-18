@@ -1,0 +1,63 @@
+{% extends 'console/base.html' %}
+{% load static console_static %}
+{% block title %}数据源详情{% endblock %}
+{% block page_title %}数据源详情{% endblock %}
+{% block content %}
+{% csrf_token %}
+<div class="mb-4">
+  <a href="{% url 'console:data-src-list' %}" class="text-blue-600 hover:underline">← 返回数据源管理</a>
+</div>
+<div id="detail-content" class="space-y-4">
+  <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{% static_ver 'console/js/main.js' %}"></script>
+<script>
+const dataSrcId = {{ pk }};
+function escapeHtml(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+fetch('/api/v1/data-srcs/' + dataSrcId, { credentials: 'same-origin' })
+  .then(r => r.json())
+  .then(j => {
+    const el = document.getElementById('detail-content');
+    if (j.errorCode !== 0) { el.innerHTML = '<p class="text-red-500">' + escapeHtml(j.message || '加载失败') + '</p>'; return; }
+    const d = j.data;
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-header flex justify-between items-center">
+          <h3 class="font-semibold">基本信息</h3>
+          <div class="flex gap-2">
+            <button type="button" id="btn-edit" class="btn btn-outline btn-sm">编辑</button>
+            <button type="button" id="btn-delete" class="btn btn-danger btn-sm">删除</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <p><strong>ID:</strong> ${d.id}</p>
+          <p><strong>名称:</strong> ${escapeHtml(d.name || '-')}</p>
+          <p><strong>数据源地址 src_url:</strong> <span class="text-xs break-all">${escapeHtml(d.src_url || '-')}</span></p>
+          <p><strong>保存路径 dest_path:</strong> ${escapeHtml(d.dest_path || '-')}</p>
+          <p><strong>ct:</strong> ${escapeHtml(d.ct)}</p>
+          <p><strong>ut:</strong> ${escapeHtml(d.ut)}</p>
+        </div>
+      </div>
+    `;
+    document.getElementById('btn-edit').onclick = function() {
+      window.location.href = '{% url "console:data-src-list" %}?edit=' + dataSrcId;
+    };
+    document.getElementById('btn-delete').onclick = function() {
+      if (!confirm('确认删除该数据源？')) return;
+      fetch('/api/v1/data-srcs/' + dataSrcId, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
+        credentials: 'same-origin'
+      }).then(r => r.json()).then(j => {
+        if (j.errorCode === 0) { if (typeof showToast === 'function') showToast('已删除', 'success'); window.location.href = '{% url "console:data-src-list" %}'; }
+        else alert(j.message || '删除失败');
+      }).catch(e => alert('删除失败: ' + e.message));
+    };
+  })
+  .catch(e => {
+    document.getElementById('detail-content').innerHTML = '<p class="text-red-500">加载失败: ' + escapeHtml(e.message) + '</p>';
+  });
+</script>
+{% endblock %}

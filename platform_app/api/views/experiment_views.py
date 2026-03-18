@@ -4,10 +4,9 @@ import threading
 
 from rest_framework.views import APIView
 
-from common.snowflake import get_snowflake_id
 from rest_framework.request import Request
 
-from common.utils.http_util import resp_ok, resp_err, resp_exception, with_type
+from common.utils.http_util import resp_ok, resp_err, resp_exception, safe_request_data, with_type
 from common.consts.response_const import RET_INVALID_PARAM, RET_RESOURCE_NOT_FOUND
 
 from platform_app.models import ExperimentRun
@@ -27,19 +26,19 @@ from platform_app.services.experiment_runner import get_runner
 logger = logging.getLogger(__name__)
 
 
-def _run_experiment_async(run_id: int, config: ExperimentConfig):
+def _run_experiment_async(pk: int, config: ExperimentConfig):
     try:
         runner = get_runner(config.data_config)
         result = runner.run(config)
         update_run_status(
-            run_id,
+            pk,
             result.status,
             metrics=result.metrics,
             error_message=result.error_message,
         )
     except Exception as e:
-        logger.exception("Experiment %s failed: %s", run_id, e)
-        update_run_status(run_id, "FAILED", error_message=str(e))
+        logger.exception("Experiment %s failed: %s", pk, e)
+        update_run_status(pk, "FAILED", error_message=str(e))
 
 
 class ExperimentListCreateView(APIView):
@@ -47,9 +46,7 @@ class ExperimentListCreateView(APIView):
 
     def post(self, request: Request):
         try:
-            data = request.data if hasattr(request, "data") and request.data else {}
-            if not isinstance(data, dict):
-                data = {}
+            data = safe_request_data(request)
             name = data.get("name") or "Unnamed"
             strategy_id = data.get("strategy_id")
             if not strategy_id:
@@ -57,9 +54,7 @@ class ExperimentListCreateView(APIView):
             params = data.get("params") or {}
             data_config = data.get("data_config") or {}
 
-            run_id = get_snowflake_id()
-            create_run(
-                run_id=run_id,
+            run = create_run(
                 name=name,
                 strategy_id=strategy_id,
                 params=params,
@@ -71,10 +66,10 @@ class ExperimentListCreateView(APIView):
                 params=params,
                 data_config=data_config,
             )
-            t = threading.Thread(target=_run_experiment_async, args=(run_id, config))
+            t = threading.Thread(target=_run_experiment_async, args=(run.id, config))
             t.daemon = True
             t.start()
-            return resp_ok({"run_id": run_id, "status": "PENDING"})
+            return resp_ok({"id": run.id, "status": "PENDING"})
         except Exception as e:
             logger.exception("Create experiment failed: %s", e)
             return resp_exception(e)
@@ -99,7 +94,7 @@ class ExperimentListCreateView(APIView):
                 params = r.params or {}
                 workflow_phase = params.get("workflow_phase")
                 data.append({
-                    "run_id": r.run_id,
+                    "id": r.id,
                     "name": r.name,
                     "strategy_id": r.strategy_id,
                     "status": r.status_label,
@@ -115,16 +110,16 @@ class ExperimentListCreateView(APIView):
 
 
 class ExperimentDetailView(APIView):
-    """GET /api/v1/experiments/{run_id} - detail; DELETE - delete record."""
+    """GET /api/v1/experiments/{pk} - detail; DELETE - delete record."""
 
-    def get(self, request: Request, run_id: int):
-        run = get_run(run_id)
+    def get(self, request: Request, pk: int):
+        run = get_run(pk)
         if not run:
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         params = run.params or {}
         workflow_phase = params.get("workflow_phase")
         return resp_ok({
-            "run_id": run.run_id,
+            "id": run.id,
             "name": run.name,
             "strategy_id": run.strategy_id,
             "params": run.params,
@@ -137,38 +132,39 @@ class ExperimentDetailView(APIView):
             "workflow_phase": workflow_phase,
             "workflow_phase_label": get_workflow_phase_label(workflow_phase),
             "ai_suggestions": params.get("ai_suggestions"),
+            "v": run.v,
         })
 
-    def delete(self, request: Request, run_id: int):
-        """DELETE /api/v1/experiments/{run_id} - delete experiment record."""
-        run = get_run(run_id)
+    def delete(self, request: Request, pk: int):
+        """DELETE /api/v1/experiments/{pk} - delete experiment record."""
+        run = get_run(pk)
         if not run:
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         run.delete()
-        return resp_ok({"run_id": run_id, "deleted": True})
+        return resp_ok({"id": pk, "deleted": True})
 
 
 class ExperimentCancelView(APIView):
-    """POST /api/v1/experiments/{run_id}/cancel"""
+    """POST /api/v1/experiments/{pk}/cancel"""
 
-    def post(self, request: Request, run_id: int):
-        run = get_run(run_id)
+    def post(self, request: Request, pk: int):
+        run = get_run(pk)
         if not run:
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         if run.status == ExperimentRun.Status.RUNNING:
-            update_run_status(run_id, "CANCELLED")
-        return resp_ok({"run_id": run_id, "status": "CANCELLED"})
+            update_run_status(pk, "CANCELLED")
+        return resp_ok({"id": pk, "status": "CANCELLED"})
 
 
 class ExperimentConfirmImprovementsView(APIView):
-    """POST /api/v1/experiments/{run_id}/confirm-improvements — 人工确认后执行改进"""
+    """POST /api/v1/experiments/{pk}/confirm-improvements — 人工确认后执行改进"""
 
-    def post(self, request: Request, run_id: int):
-        run = get_run(run_id)
+    def post(self, request: Request, pk: int):
+        run = get_run(pk)
         if not run:
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         try:
-            out = confirm_and_apply_improvements(run_id)
+            out = confirm_and_apply_improvements(pk)
             if out.get("error"):
                 return resp_err(out["error"], code=RET_INVALID_PARAM)
             return resp_ok(out)

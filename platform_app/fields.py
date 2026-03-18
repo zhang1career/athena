@@ -12,7 +12,9 @@ class JSONTextField(models.TextField):
         super().__init__(*args, **kwargs)
 
     def from_db_value(self, value, expression, connection):
-        if value is None or value == "":
+        if value is None:
+            return self.json_type()
+        if isinstance(value, str) and not value.strip():
             return self.json_type()
         try:
             return json.loads(value)

@@ -2,10 +2,11 @@
  * app_console 列表操作风格：统一复用组件
  *
  * 设计约定（列表页）：
- * - 无「详情」按钮：点击列表项主列（名称/标题）进入详情页
+ * - 无「详情」按钮：点击 ID 列进入详情页（RESTful，URL 带 id）
  * - 「删除」：仅用图标（垃圾桶），title="删除"
  * - 「编辑」：仅用图标（铅笔），title="编辑"
- * - 主列：使用 listTitleCell(text, detailUrl) 可点击进入详情
+ * - ID 列：使用 listIdCell(id, detailUrl) 可点击进入详情
+ * - 名称列：使用 listPlainCell(text) 仅展示，不链接
  * - 操作列：使用 listActions({ id, onEdit?, onDelete?, extra? }) 输出图标
  */
 function escapeHtml(s) {
@@ -20,6 +21,21 @@ function listTitleCell(text, url, cssClass) {
   const escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const escapedUrl = String(url || '').replace(/"/g, '&quot;');
   return `<td class="${cssClass || 'font-medium'}"><a href="${escapedUrl}" class="text-blue-600 hover:underline cursor-pointer">${escaped}</a></td>`;
+}
+
+/** ID 列：可点击进入详情页（RESTful URL 带 id） */
+function listIdCell(id, detailUrl) {
+  const display = id != null && id !== '' ? String(id) : '-';
+  const escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapedUrl = String(detailUrl || '').replace(/"/g, '&quot;');
+  return `<td class="font-mono text-gray-500"><a href="${escapedUrl}" class="text-blue-600 hover:underline cursor-pointer">${escaped}</a></td>`;
+}
+
+/** 名称列：仅展示文本，不链接 */
+function listPlainCell(text) {
+  const display = text != null && String(text).trim() !== '' ? String(text).trim() : '-';
+  const escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return `<td class="font-medium">${escaped}</td>`;
 }
 
 /**
@@ -52,4 +68,12 @@ function listActions(opts) {
 
   html += '</div></td>';
   return html;
+}
+
+// 挂到 window，避免缓存或加载顺序导致未定义
+if (typeof window !== 'undefined') {
+  window.listIdCell = listIdCell;
+  window.listPlainCell = listPlainCell;
+  window.listTitleCell = listTitleCell;
+  window.listActions = listActions;
 }
