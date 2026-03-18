@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from platform_app.models import DataFile, DataPatch, DataPatchBatch, DataSrc, FormatType
+from platform_app.services.data_src_url import resolve_data_src_url
 
 logger = logging.getLogger(__name__)
 
@@ -178,8 +179,8 @@ def load_composed_records(
     batches = batches_by_versions(patch_batch_versions)
 
     if file_rec:
-        src_url = file_rec.data_src.src_url
-        body = _fetch_body(src_url)
+        resolved_url = resolve_data_src_url(file_rec.data_src)
+        body = _fetch_body(resolved_url)
         base = _load_records_by_format_type(body, file_rec.format_type)
         snapshot_ct = file_rec.ct
     else:

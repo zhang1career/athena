@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from platform_app.models import DataSrc
+from platform_app.services.data_src_url import resolve_data_src_url
 from platform_app.repos.experiment_repo import (
     create_run,
     get_run,
@@ -88,7 +89,7 @@ def check_prerequisites_worldcup(data_src_id: int = 0) -> Dict[str, Any]:
     if data_src_id:
         try:
             ds = DataSrc.objects.get(pk=data_src_id)
-            selected_url = ds.src_url or ""
+            selected_url = resolve_data_src_url(ds) or ""
         except DataSrc.DoesNotExist:
             pass
     env_summary = {
@@ -232,9 +233,9 @@ def start_prediction_round(
         )
         if not composed_records and snapshot_ct == 0:
             ds = DataSrc.objects.get(pk=data_src_id)
-            src_url = (ds.src_url or "").strip()
-            if src_url:
-                format_type, records = fetch_full_records(src_url)
+            resolved_url = (resolve_data_src_url(ds) or "").strip()
+            if resolved_url:
+                format_type, records = fetch_full_records(resolved_url)
                 if records:
                     save_full_snapshot(version_v=now, data_src_id=data_src_id, format_type=format_type)
                     composed_records, snapshot_ct, patch_count = load_composed_records(
@@ -252,7 +253,7 @@ def start_prediction_round(
     try:
         ds = DataSrc.objects.get(pk=data_src_id)
         dest_path = (ds.dest_path or "").strip()
-        source_url = ds.src_url or ""
+        source_url = resolve_data_src_url(ds) or ""
     except DataSrc.DoesNotExist:
         dest_path = ""
         source_url = ""

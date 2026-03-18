@@ -106,10 +106,14 @@ class FormatType:
 
 
 class DataSrc(models.Model):
-    """数据源的元信息。"""
+    """数据源的元信息。
+    src_url 可为字面 URL，或带占位符的模板（如 data/budget/{year}.json）。
+    url_params 为占位符名称列表，JSON 数组，每项 {"name": "占位符名"}，如 [{"name": "year"}]。
+    """
 
     name = models.CharField(max_length=255, default="")
     src_url = models.CharField(max_length=1024, default="")
+    url_params = JSONTextField(default=list, json_type=list)  # 占位符列表 [{"name": "year"}, ...]
     dest_path = models.CharField(max_length=512, default="")
     ct = models.PositiveBigIntegerField(default=0, db_column="ct")
     ut = models.PositiveBigIntegerField(default=0, db_column="ut")

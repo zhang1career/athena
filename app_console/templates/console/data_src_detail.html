@@ -1,7 +1,7 @@
 {% extends 'console/base.html' %}
 {% load static console_static %}
-{% block title %}数据源详情{% endblock %}
-{% block page_title %}数据源详情{% endblock %}
+{% block title %}数据源{% endblock %}
+{% block page_title %}数据源管理{% endblock %}
 {% block content %}
 {% csrf_token %}
 <div class="mb-4">
@@ -35,6 +35,7 @@ fetch('/api/v1/data-srcs/' + dataSrcId, { credentials: 'same-origin' })
           <p><strong>ID:</strong> ${d.id}</p>
           <p><strong>名称:</strong> ${escapeHtml(d.name || '-')}</p>
           <p><strong>数据源地址 src_url:</strong> <span class="text-xs break-all">${escapeHtml(d.src_url || '-')}</span></p>
+          <p><strong>URL 参数 url_params:</strong> <code class="text-xs">${escapeHtml(d.url_params && typeof d.url_params === 'object' ? JSON.stringify(d.url_params) : '-')}</code></p>
           <p><strong>保存路径 dest_path:</strong> ${escapeHtml(d.dest_path || '-')}</p>
           <p><strong>ct:</strong> ${escapeHtml(d.ct)}</p>
           <p><strong>ut:</strong> ${escapeHtml(d.ut)}</p>
