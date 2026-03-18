@@ -1,0 +1,15 @@
+{% extends 'console/base.html' %}
+{% load static console_static %}
+{% block content %}
+<div class="card mb-4">
+  <div class="card-header flex justify-between items-center">
+    <h2 class="text-lg font-semibold">{% block list_title %}列表{% endblock %}</h2>
+    {% block list_header_actions %}{% endblock %}
+  </div>
+  <div class="card-body p-0">
+    <div id="{% block list_container_id %}list-container{% endblock %}">
+      {% include 'console/_card_loading.html' %}
+    </div>
+  </div>
+</div>
+{% endblock %}

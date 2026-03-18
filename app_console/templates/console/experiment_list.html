@@ -1,107 +1,63 @@
-{% extends 'console/base.html' %}
+{% extends 'console/base_list.html' %}
 {% load static console_static %}
 {% block title %}实验管理{% endblock %}
 {% block page_title %}实验管理{% endblock %}
-{% block content %}
-{% csrf_token %}
-<div class="card mb-4">
-  <div class="card-header flex justify-between items-center">
-    <h2 class="text-lg font-semibold">实验列表</h2>
-    <button id="btn-create" class="btn btn-primary btn-sm">新建实验</button>
-  </div>
-  <div class="card-body p-0">
-    <div id="experiment-list">
-      <div class="p-8 text-center text-gray-500">
-        <div class="spinner"></div>
-        <p class="mt-2">加载中...</p>
-      </div>
-    </div>
-  </div>
-</div>
+{% block list_title %}实验列表{% endblock %}
+{% block list_container_id %}experiment-list{% endblock %}
+{% block list_header_actions %}
+<button id="btn-create" class="btn btn-primary btn-sm">新建实验</button>
 {% endblock %}
+
+{% block content %}
+{{ block.super }}
+{% csrf_token %}
+{% endblock %}
+
 {% block extra_js %}
+<script src="{% static_ver 'console/js/api.js' %}"></script>
 <script src="{% static_ver 'console/js/list-actions.js' %}"></script>
+<script src="{% static_ver 'console/js/list-page.js' %}"></script>
 <script src="{% static_ver 'console/js/main.js' %}"></script>
 <script>
 (function() {
-  if (typeof listIdCell === 'undefined') {
-    window.listIdCell = function(id, detailUrl) {
-      var display = (id != null && id !== '') ? String(id) : '-';
-      var escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      var escapedUrl = String(detailUrl || '').replace(/"/g, '&quot;');
-      return '<td class="font-mono text-gray-500"><a href="' + escapedUrl + '" class="text-blue-600 hover:underline cursor-pointer">' + escaped + '</a></td>';
-    };
-  }
-  if (typeof listPlainCell === 'undefined') {
-    window.listPlainCell = function(text) {
-      var display = (text != null && String(text).trim() !== '') ? String(text).trim() : '-';
-      var escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      return '<td class="font-medium">' + escaped + '</td>';
-    };
-  }
+  var API = '/api/v1/experiments';
+  window.deleteExperiment = function(id) {
+    if (!confirm('确认删除该实验记录？此操作不可恢复。')) return;
+    window.ConsoleApi.apiDelete(API + '/' + id)
+      .then(function() {
+        if (typeof showToast === 'function') showToast('已删除', 'success');
+        window.ConsoleListPage.refresh();
+      })
+      .catch(function(e) { alert(e.message || '删除失败'); });
+  };
+  ConsoleListPage.run({
+    apiUrl: API,
+    containerId: 'experiment-list',
+    listResponseKey: 'data',
+    totalKey: 'total',
+    emptyMessage: '暂无实验',
+    emptyHint: '点击「新建实验」创建',
+    columns: [
+      { key: 'id', label: 'id', type: 'id', detailUrlTemplate: function(r) { return '/console/experiments/' + r.id + '/'; } },
+      { key: 'name', label: '名称', type: 'text', valueGetter: function(r) { return r.name || r.id || '-'; } },
+      { key: 'strategy_id', label: '策略', type: 'text' },
+      { key: 'status', label: '状态', type: 'badge', badgeMap: { SUCCESS: 'badge-success', RUNNING: 'badge-running' } },
+      { key: 'workflow_phase_label', label: '阶段', type: 'text' },
+      { key: 'metrics', label: '指标', type: 'truncate', truncateLen: 80 },
+      { key: 'created_at', label: '创建时间', type: 'datetime' },
+    ],
+    actions: { onDelete: 'deleteExperiment' },
+  });
+  document.getElementById('btn-create').onclick = function() {
+    var strategyId = prompt('策略 ID (如 sklearn_rf, lightgbm):', 'sklearn_rf');
+    if (!strategyId) return;
+    window.ConsoleApi.apiPost(API, { name: '新实验', strategy_id: strategyId })
+      .then(function(data) {
+        if (typeof showToast === 'function') showToast('已创建 id: ' + data.id, 'success');
+        ConsoleListPage.refresh();
+      })
+      .catch(function(e) { alert(e.message || '创建失败'); });
+  };
 })();
-const API = '/api/v1/experiments';
-function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function deleteExperiment(id) {
-  if (!confirm('确认删除该实验记录？此操作不可恢复。')) return;
-  fetch(API + '/' + id, { method: 'DELETE', headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' }, credentials: 'same-origin' })
-    .then(r => r.json()).then(j => {
-      if (j.errorCode === 0) { if (typeof showToast === 'function') showToast('已删除', 'success'); loadExperiments(); }
-      else alert(j.message || '删除失败');
-    }).catch(e => alert('删除失败: ' + e.message));
-}
-async function loadExperiments() {
-  const el = document.getElementById('experiment-list');
-  try {
-    const r = await fetch(API + '?limit=100');
-    const j = await r.json();
-    if (j.errorCode !== 0) throw new Error(j.message || '加载失败');
-    const items = (j.data && j.data.data) || [];
-    const total = (j.data && j.data.total) || 0;
-    if (items.length > 0) {
-      let h = '<table class="data-table"><thead><tr><th>id</th><th>名称</th><th>策略</th><th>状态</th><th>阶段</th><th>指标</th><th>创建时间</th><th>操作</th></tr></thead><tbody>';
-      items.forEach(x => {
-        const metrics = x.metrics && typeof x.metrics === 'object' ? JSON.stringify(x.metrics).slice(0, 80) : '-';
-        const statusClass = x.status === 'SUCCESS' ? 'badge-success' : x.status === 'RUNNING' ? 'badge-running' : 'badge-warning';
-        const detailUrl = '/console/experiments/' + x.id + '/';
-        const nameDisplay = x.name || x.id || '-';
-        const phaseLabel = x.workflow_phase_label || '-';
-        h += `<tr>
-          ${(window.listIdCell || listIdCell)(x.id, detailUrl)}
-          ${(window.listPlainCell || listPlainCell)(nameDisplay)}
-          <td>${escapeHtml(x.strategy_id || '-')}</td>
-          <td><span class="badge ${statusClass}">${escapeHtml(x.status)}</span></td>
-          <td class="text-xs">${escapeHtml(phaseLabel)}</td>
-          <td class="text-xs">${escapeHtml(metrics)}</td>
-          <td>${escapeHtml(x.created_at ? x.created_at.slice(0, 19) : '-')}</td>
-          ${listActions({ id: x.id, onDelete: 'deleteExperiment' })}
-        </tr>`;
-      });
-      h += '</tbody></table>';
-      if (total > items.length) h += `<p class="px-4 py-2 text-sm text-gray-500">共 ${total} 条</p>`;
-      el.innerHTML = h;
-    } else {
-      el.innerHTML = '<div class="empty-state"><p>暂无实验</p><p class="text-sm mt-2">点击「新建实验」创建</p></div>';
-    }
-  } catch (e) {
-    el.innerHTML = '<div class="p-8 text-center text-red-500">加载失败: ' + escapeHtml(e.message) + '</div>';
-  }
-}
-document.getElementById('btn-create').onclick = function() {
-  const strategyId = prompt('策略 ID (如 sklearn_rf, lightgbm):', 'sklearn_rf');
-  if (!strategyId) return;
-  fetch(API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
-    body: JSON.stringify({ name: '新实验', strategy_id: strategyId }),
-    credentials: 'same-origin'
-  }).then(r => r.json()).then(j => {
-    if (j.errorCode === 0) {
-      if (typeof showToast === 'function') showToast('已创建 id: ' + j.data.id, 'success');
-      loadExperiments();
-    } else alert(j.message || '创建失败');
-  }).catch(e => alert('创建失败: ' + e.message));
-};
-loadExperiments();
 </script>
 {% endblock %}

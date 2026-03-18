@@ -30,3 +30,40 @@ body { background-color: #dcf5e0; }
 .data-table th, .data-table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
 .data-table th { font-weight: 600; background: #f9fafb; }
 .empty-state { padding: 2rem; text-center; color: #6b7280; }
+
+/* 暗色主题：html.theme-dark */
+html.theme-dark body { background-color: #111827; }
+html.theme-dark .theme-header { background: #1f2937; border-bottom: 1px solid #374151; }
+html.theme-dark .theme-title { color: #f3f4f6; }
+html.theme-dark .theme-toggle-icon { color: #9ca3af; }
+html.theme-dark main { background: #111827; }
+html.theme-dark aside { background: #0f172a; border-right: 1px solid #1e293b; }
+html.theme-dark aside .border-gray-700 { border-color: #334155; }
+html.theme-dark aside a:hover { background: #1e293b; }
+html.theme-dark aside a.bg-gray-700 { background: #334155; }
+html.theme-dark .card { background: #1f2937; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+html.theme-dark .card-header { border-bottom-color: #374151; }
+html.theme-dark .card-body { color: #e5e7eb; }
+html.theme-dark .data-table th,
+html.theme-dark .data-table td { border-bottom-color: #374151; color: #e5e7eb; }
+html.theme-dark .data-table th { background: #374151; color: #f3f4f6; }
+html.theme-dark .empty-state { color: #9ca3af; }
+html.theme-dark .btn-outline { background: #374151; border-color: #4b5563; color: #e5e7eb; }
+html.theme-dark .btn-outline:hover { background: #4b5563; }
+html.theme-dark input[type="text"],
+html.theme-dark input[type="number"],
+html.theme-dark textarea,
+html.theme-dark select { background: #374151; border-color: #4b5563; color: #f3f4f6; }
+html.theme-dark label { color: #d1d5db; }
+html.theme-dark .badge-success { background: #065f46; color: #a7f3d0; }
+html.theme-dark .badge-warning { background: #92400e; color: #fef3c7; }
+html.theme-dark .badge-running { background: #1e40af; color: #bfdbfe; }
+html.theme-dark #toast-container .bg-green-100 { background: #065f46; color: #a7f3d0; }
+html.theme-dark #toast-container .bg-red-100 { background: #7f1d1d; color: #fecaca; }
+html.theme-dark #toast-container .bg-gray-100 { background: #374151; color: #e5e7eb; }
+html.theme-dark .text-gray-500 { color: #9ca3af; }
+html.theme-dark .text-gray-600 { color: #d1d5db; }
+html.theme-dark .text-gray-800 { color: #f3f4f6; }
+html.theme-dark .text-blue-600 { color: #93c5fd; }
+html.theme-dark .text-red-500 { color: #fca5a5; }
+html.theme-dark .spinner { border-color: #374151; border-top-color: #60a5fa; }

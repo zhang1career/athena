@@ -1,0 +1,4 @@
+<div class="empty-state">
+  <p>{{ empty_message|default:"暂无数据" }}</p>
+  {% if empty_hint %}<p class="text-sm mt-2">{{ empty_hint }}</p>{% endif %}
+</div>
