@@ -66,6 +66,24 @@ def resolve_data_src_url(
     return _PLACEHOLDER_RE.sub(repl, template)
 
 
+def resolve_template(template: str, params: Dict[str, Any]) -> str:
+    """将模板中的 {key} 用 params 替换，返回最终字符串。"""
+    if not template or not template.strip():
+        return ""
+    params = dict(params or {})
+    if not _PLACEHOLDER_RE.search(template):
+        return template.strip()
+
+    def repl(m: re.Match) -> str:
+        key = m.group(1)
+        value = params.get(key)
+        if value is None:
+            return m.group(0)
+        return str(value)
+
+    return _PLACEHOLDER_RE.sub(repl, template.strip())
+
+
 def list_url_placeholders(src_url: str) -> list:
     """从 src_url 模板中解析出占位符名列表，便于前端展示或校验。"""
     if not src_url or not src_url.strip():

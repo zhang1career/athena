@@ -70,10 +70,20 @@ def _load_records_from_json_text(text: str) -> List[Dict[str, Any]]:
 
 
 def _infer_format_type(src_url: str) -> int:
-    lower = src_url.lower()
+    """从 URL 或路径字符串推断格式（用于从 URL 拉取时的解析）。"""
+    lower = (src_url or "").lower()
+    if ".xlsx" in lower:
+        return FormatType.EXCEL
+    if ".xls" in lower and ".xlsx" not in lower:
+        return FormatType.XLS
     if lower.endswith(".csv"):
         return FormatType.CSV
     return FormatType.JSON
+
+
+def _infer_format_from_path(file_path: str) -> int:
+    """从 file_path 扩展名推断格式（data_file 无 format_type 时用）。"""
+    return _infer_format_type(file_path or "")
 
 
 def _fetch_body(src_url: str) -> str:
@@ -93,6 +103,8 @@ def _fetch_body(src_url: str) -> str:
 def _load_records_by_format_type(body: str, format_type: int) -> List[Dict[str, Any]]:
     if format_type == FormatType.CSV:
         return _load_records_from_csv_text(body)
+    if format_type in (FormatType.EXCEL, FormatType.XLS):
+        return []  # 二进制格式，本模块不解析
     return _load_records_from_json_text(body)
 
 
@@ -104,11 +116,12 @@ def fetch_full_records(src_url: str) -> Tuple[int, List[Dict[str, Any]]]:
     return format_type, records
 
 
-def save_full_snapshot(version_v: int, data_src_id: int, format_type: int):
-    """Save metadata only. Data stays in file at data_src.src_url."""
+def save_full_snapshot(version_v: int, data_src_id: int):
+    """仅保存元数据；数据仍在 data_src.src_url 所指位置。"""
     DataFile.objects.create(
         data_src_id=data_src_id,
-        format_type=format_type,
+        name="",
+        file_path="",
         ct=version_v,
     )
 
@@ -179,9 +192,20 @@ def load_composed_records(
     batches = batches_by_versions(patch_batch_versions)
 
     if file_rec:
-        resolved_url = resolve_data_src_url(file_rec.data_src)
-        body = _fetch_body(resolved_url)
-        base = _load_records_by_format_type(body, file_rec.format_type)
+        if file_rec.file_path and file_rec.file_path.strip():
+            full_path = _project_root() / file_rec.file_path.strip()
+            format_type = _infer_format_from_path(file_rec.file_path)
+            if format_type in (FormatType.EXCEL, FormatType.XLS):
+                body = ""
+                base = []
+            else:
+                body = full_path.read_text(encoding="utf-8")
+                base = _load_records_by_format_type(body, format_type)
+        else:
+            resolved_url = resolve_data_src_url(file_rec.data_src)
+            body = _fetch_body(resolved_url)
+            format_type = _infer_format_type(resolved_url)
+            base = _load_records_by_format_type(body, format_type)
         snapshot_ct = file_rec.ct
     else:
         base = []

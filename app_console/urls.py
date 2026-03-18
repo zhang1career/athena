@@ -6,6 +6,7 @@ from app_console.views import (
     StrategyListView,
     DataSrcListView,
     DataSrcDetailView,
+    RawDataManagementView,
     ExperimentCompareView,
     WorldCupAppView,
 )
@@ -21,4 +22,5 @@ urlpatterns = [
     path("strategies/", StrategyListView.as_view(), name="strategy-list"),
     path("data-srcs/", DataSrcListView.as_view(), name="data-src-list"),
     path("data-srcs/<int:pk>/", DataSrcDetailView.as_view(), name="data-src-detail"),
+    path("raw-data/", RawDataManagementView.as_view(), name="raw-data"),
 ]

@@ -1,11 +1,11 @@
 {% extends 'console/base.html' %}
 {% load static console_static %}
-{% block title %}数据源{% endblock %}
-{% block page_title %}数据源管理{% endblock %}
+{% block title %}数据源管理{% endblock %}
+{% block page_title %}数据源详情{% endblock %}
 {% block content %}
 {% csrf_token %}
 <div class="mb-4">
-  <a href="{% url 'console:data-src-list' %}" class="text-blue-600 hover:underline">← 返回数据源管理</a>
+  <a href="{% url 'console:data-src-list' %}" class="text-blue-600 hover:underline">← 返回数据源列表</a>
 </div>
 <div id="detail-content" class="space-y-4">
   <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
@@ -22,6 +22,14 @@ fetch('/api/v1/data-srcs/' + dataSrcId, { credentials: 'same-origin' })
     const el = document.getElementById('detail-content');
     if (j.errorCode !== 0) { el.innerHTML = '<p class="text-red-500">' + escapeHtml(j.message || '加载失败') + '</p>'; return; }
     const d = j.data;
+    const urlParams = Array.isArray(d.url_params) ? d.url_params : [];
+    const fetchInputsHtml = urlParams.map(function(p, i) {
+      const paramName = (p && p.name) ? String(p.name) : '';
+      const label = escapeHtml(paramName || '');
+      const inputId = 'fetch-param-' + i;
+      return '<div class="flex items-center gap-2"><label for="' + inputId + '" class="w-24 text-sm">' + label + '</label><input type="text" id="' + inputId + '" class="border border-gray-300 rounded px-2 py-1 flex-1" /></div>';
+    }).join('');
+    const hasFetchSection = urlParams.length > 0 && (d.raw_path || '').trim() !== '';
     el.innerHTML = `
       <div class="card">
         <div class="card-header flex justify-between items-center">
@@ -36,15 +44,61 @@ fetch('/api/v1/data-srcs/' + dataSrcId, { credentials: 'same-origin' })
           <p><strong>名称:</strong> ${escapeHtml(d.name || '-')}</p>
           <p><strong>数据源地址 src_url:</strong> <span class="text-xs break-all">${escapeHtml(d.src_url || '-')}</span></p>
           <p><strong>URL 参数 url_params:</strong> <code class="text-xs">${escapeHtml(d.url_params && typeof d.url_params === 'object' ? JSON.stringify(d.url_params) : '-')}</code></p>
-          <p><strong>保存路径 dest_path:</strong> ${escapeHtml(d.dest_path || '-')}</p>
+          <p><strong>raw_name:</strong> ${escapeHtml(d.raw_name || '-')}</p>
+          <p><strong>保存路径 raw_path:</strong> ${escapeHtml(d.raw_path || '-')}</p>
+          <p><strong>cleaned_name:</strong> ${escapeHtml(d.cleaned_name || '-')}</p>
+          <p><strong>cleaned_path:</strong> ${escapeHtml(d.cleaned_path || '-')}</p>
+          <p><strong>清洗脚本 clean_script:</strong> ${d.clean_script ? '已配置' : '-'}</p>
+          <p><strong>获取数据时:</strong> ${d.fetch_mode === 1 ? '仅网页中的表格' : '原始（保存完整响应）'}</p>
+          <p><strong>表格输出格式:</strong> ${d.format_type === 3 ? 'Excel (.xlsx)' : (d.format_type === 4 ? 'Excel (.xls)' : (d.format_type === 2 ? 'CSV' : 'JSON'))}</p>
           <p><strong>ct:</strong> ${escapeHtml(d.ct)}</p>
           <p><strong>ut:</strong> ${escapeHtml(d.ut)}</p>
         </div>
       </div>
+      ${hasFetchSection ? `
+      <div class="card">
+        <div class="card-header"><h3 class="font-semibold">原始数据</h3></div>
+        <div class="card-body space-y-3">
+          <p class="text-sm text-gray-600">填写参数后点击「获取数据」将拉取数据并保存到 raw_path，并创建 raw_data_file 记录（时间戳由 year/month/day/hour/minute/second 计算）。当前：${d.fetch_mode === 1 ? '仅网页中的表格，输出格式见上方' : '原始（保存完整响应）'}，可在编辑中修改。</p>
+          <div class="space-y-2" id="fetch-params-group">${fetchInputsHtml}</div>
+          <button type="button" id="btn-fetch" class="btn btn-primary">获取数据</button>
+          <span id="fetch-status" class="ml-2 text-sm"></span>
+        </div>
+      </div>
+      ` : ''}
     `;
     document.getElementById('btn-edit').onclick = function() {
       window.location.href = '{% url "console:data-src-list" %}?edit=' + dataSrcId;
     };
+    if (hasFetchSection) {
+      document.getElementById('btn-fetch').onclick = function() {
+        var statusEl = document.getElementById('fetch-status');
+        statusEl.textContent = '请求中...';
+        var params = {};
+        urlParams.forEach(function(p, i) {
+          var name = (p && p.name) ? String(p.name) : '';
+          if (name) {
+            var input = document.getElementById('fetch-param-' + i);
+            params[name] = input ? input.value.trim() : '';
+          }
+        });
+        fetch('/api/v1/data-srcs/' + dataSrcId + '/fetch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
+          body: JSON.stringify({ params: params }),
+          credentials: 'same-origin'
+        }).then(function(r) { return r.json(); }).then(function(j) {
+          if (j.errorCode === 0 && j.data && j.data.ok) {
+            statusEl.textContent = '已保存：' + (j.data.file_path || '') + '，raw_data_file_id=' + (j.data.raw_data_file_id || '') + '，ct=' + j.data.ct;
+            if (typeof showToast === 'function') showToast('获取数据成功', 'success');
+          } else {
+            statusEl.textContent = '失败：' + (j.message || (j.data && j.data.error) || '未知错误');
+          }
+        }).catch(function(e) {
+          statusEl.textContent = '请求失败：' + e.message;
+        });
+      };
+    }
     document.getElementById('btn-delete').onclick = function() {
       if (!confirm('确认删除该数据源？')) return;
       fetch('/api/v1/data-srcs/' + dataSrcId, {

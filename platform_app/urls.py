@@ -14,7 +14,15 @@ from platform_app.api.views.research_views import (
     DataFileVersionsView,
     StartPredictionRoundView,
 )
-from platform_app.api.views.data_src_views import DataSrcListCreateView, DataSrcDetailView
+from platform_app.api.views.data_src_views import (
+    DataSrcListCreateView,
+    DataSrcDetailView,
+    DataSrcFetchView,
+)
+from platform_app.api.views.raw_data_file_views import (
+    RawDataFileListView,
+    RawDataFileCleanView,
+)
 
 urlpatterns = [
     path("experiments", ExperimentListCreateView.as_view()),
@@ -29,5 +37,8 @@ urlpatterns = [
     path("research/data-file-versions", DataFileVersionsView.as_view()),
     path("research/start-prediction-round", StartPredictionRoundView.as_view()),
     path("data-srcs", DataSrcListCreateView.as_view()),
+    path("data-srcs/<int:pk>/fetch", DataSrcFetchView.as_view()),
     path("data-srcs/<int:pk>", DataSrcDetailView.as_view()),
+    path("raw-data-files", RawDataFileListView.as_view()),
+    path("raw-data-files/<int:pk>/clean", RawDataFileCleanView.as_view()),
 ]

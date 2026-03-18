@@ -48,6 +48,12 @@
                     </a>
                 </li>
                 <li>
+                    <a href="{% url 'console:raw-data' %}"
+                       class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 {% if 'raw-data' in request.path %}bg-gray-700{% endif %}">
+                        <span class="ml-3">原始数据</span>
+                    </a>
+                </li>
+                <li>
                     <div class="px-4 py-2 mt-2 text-gray-400 text-xs font-medium uppercase tracking-wider">应用</div>
                     <ul class="space-y-0.5">
                         <li>

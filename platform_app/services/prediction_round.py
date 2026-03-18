@@ -237,7 +237,7 @@ def start_prediction_round(
             if resolved_url:
                 format_type, records = fetch_full_records(resolved_url)
                 if records:
-                    save_full_snapshot(version_v=now, data_src_id=data_src_id, format_type=format_type)
+                    save_full_snapshot(version_v=now, data_src_id=data_src_id)
                     composed_records, snapshot_ct, patch_count = load_composed_records(
                         data_src_id=data_src_id,
                         data_file_version=data_file_v,
@@ -252,7 +252,7 @@ def start_prediction_round(
 
     try:
         ds = DataSrc.objects.get(pk=data_src_id)
-        dest_path = (ds.dest_path or "").strip()
+        dest_path = (ds.raw_path or "").strip()
         source_url = resolve_data_src_url(ds) or ""
     except DataSrc.DoesNotExist:
         dest_path = ""

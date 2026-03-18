@@ -35,6 +35,15 @@ class DataSrcDetailView(TemplateView):
         return context
 
 
+class RawDataManagementView(TemplateView):
+    template_name = "console/raw_data_management.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["data_src_id"] = self.request.GET.get("data_src_id", "")
+        return context
+
+
 class ExperimentCompareView(TemplateView):
     template_name = "console/experiment_compare.html"
 

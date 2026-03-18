@@ -1,0 +1,114 @@
+{% extends 'console/base.html' %}
+{% load static console_static %}
+{% block title %}原始数据管理{% endblock %}
+{% block page_title %}原始数据管理{% endblock %}
+{% block content %}
+{% csrf_token %}
+<div class="mb-4">
+  <a href="{% url 'console:data-src-list' %}" class="text-blue-600 hover:underline">← 返回数据源列表</a>
+</div>
+<div class="card mb-4">
+  <div class="card-body">
+    <label class="block text-sm font-medium text-gray-700 mb-2">选择数据源</label>
+    <select id="data-src-select" class="border border-gray-300 rounded px-3 py-2 w-full max-w-md">
+      <option value="">-- 请选择数据源 --</option>
+    </select>
+    <p id="data-src-hint" class="text-sm text-gray-500 mt-1">或从数据源列表点击「原始数据」进入</p>
+  </div>
+</div>
+<div class="card">
+  <div class="card-header"><h3 class="font-semibold">数据列表</h3></div>
+  <div class="card-body p-0">
+    <div id="raw-data-list">
+      <div class="p-8 text-center text-gray-500">请选择数据源</div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{% static_ver 'console/js/main.js' %}"></script>
+<script>
+function escapeHtml(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+const DATA_SRC_ID = "{{ data_src_id|default:'' }}";
+
+function loadDataSrcs() {
+  fetch('/api/v1/data-srcs', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      const sel = document.getElementById('data-src-select');
+      const items = (j.data && j.data.data_srcs) || [];
+      sel.innerHTML = '<option value="">-- 请选择数据源 --</option>' +
+        items.map(x => '<option value="' + x.id + '">' + escapeHtml(x.name || 'ID:' + x.id) + '</option>').join('');
+      if (DATA_SRC_ID) sel.value = DATA_SRC_ID;
+      sel.onchange = () => loadRawDataList(sel.value);
+      if (sel.value) loadRawDataList(sel.value);
+    })
+    .catch(e => document.getElementById('raw-data-list').innerHTML = '<p class="p-4 text-red-500">加载失败</p>');
+}
+
+function loadRawDataList(dataSrcId) {
+  const el = document.getElementById('raw-data-list');
+  if (!dataSrcId) {
+    el.innerHTML = '<div class="p-8 text-center text-gray-500">请选择数据源</div>';
+    return;
+  }
+  el.innerHTML = '<div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>';
+  fetch('/api/v1/raw-data-files?data_src_id=' + dataSrcId, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(j => {
+      if (j.errorCode !== 0) {
+        el.innerHTML = '<p class="p-4 text-red-500">' + escapeHtml(j.message || '加载失败') + '</p>';
+        return;
+      }
+      const items = (j.data && j.data.items) || [];
+      if (items.length === 0) {
+        el.innerHTML = '<div class="empty-state p-8"><p>暂无原始数据</p><p class="text-sm mt-2">在数据源详情页「原始数据」板块获取数据后此处会显示</p></div>';
+        return;
+      }
+      const h = '<table class="data-table"><thead><tr><th>ID</th><th>name</th><th>file_path</th><th>args</th><th>ct</th><th>ut</th><th>操作</th></tr></thead><tbody>' +
+        items.map(x => {
+          const argsShort = escapeHtml(x.args || '').slice(0, 30) + ((x.args || '').length > 30 ? '...' : '');
+          const pathShort = escapeHtml(x.file_path || '').slice(0, 40) + ((x.file_path || '').length > 40 ? '...' : '');
+          return '<tr>' +
+            '<td class="font-mono text-gray-500">' + escapeHtml(x.id) + '</td>' +
+            '<td>' + escapeHtml(x.name || '-') + '</td>' +
+            '<td class="text-xs" title="' + escapeHtml(x.file_path || '') + '">' + pathShort + '</td>' +
+            '<td class="text-xs" title="' + escapeHtml(x.args || '') + '">' + argsShort + '</td>' +
+            '<td>' + escapeHtml(x.ct) + '</td>' +
+            '<td>' + escapeHtml(x.ut) + '</td>' +
+            '<td><button type="button" class="btn btn-outline btn-sm" onclick="doClean(' + x.id + ')">清洗</button></td>' +
+            '</tr>';
+        }).join('') +
+        '</tbody></table>';
+      el.innerHTML = h;
+    })
+    .catch(e => {
+      el.innerHTML = '<p class="p-4 text-red-500">加载失败: ' + escapeHtml(e.message) + '</p>';
+    });
+}
+
+function doClean(rawDataFileId) {
+  if (!confirm('确认对该条原始数据执行清洗脚本？')) return;
+  const btn = event && event.target;
+  if (btn) { btn.disabled = true; btn.textContent = '清洗中...'; }
+  fetch('/api/v1/raw-data-files/' + rawDataFileId + '/clean', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
+    body: '{}',
+    credentials: 'same-origin'
+  }).then(r => r.json()).then(j => {
+    if (btn) { btn.disabled = false; btn.textContent = '清洗'; }
+    if (j.errorCode === 0) {
+      if (typeof showToast === 'function') showToast('清洗完成', 'success');
+    } else {
+      alert(j.message || (j.data && j.data.error) || '清洗失败');
+    }
+  }).catch(e => {
+    if (btn) { btn.disabled = false; btn.textContent = '清洗'; }
+    alert('请求失败: ' + e.message);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', loadDataSrcs);
+</script>
+{% endblock %}
