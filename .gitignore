@@ -1,3 +1,13 @@
 .idea/
-
 .git/
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.env.*
+!.env.example
+staticfiles/
+*.log
+.venv/
+venv/
+db.sqlite3

@@ -1,0 +1,10 @@
+# Platform default Hydra config
+defaults:
+  - _self_
+
+platform:
+  experiment:
+    train_ratio: 0.7
+    val_ratio: 0.15
+  backtest:
+    method: walk_forward

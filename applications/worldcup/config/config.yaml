@@ -1,0 +1,15 @@
+# World Cup application config per DESIGN_SPECIFICATIONS §11
+application: worldcup
+data:
+  loader: applications.worldcup.data.loader.worldcup_data_loader
+  split:
+    method: time_based
+    train_ratio: 0.7
+    val_ratio: 0.15
+metrics:
+  - accuracy
+  - log_loss
+strategies:
+  - lightgbm_match
+  - elo_baseline
+  - lightgbm_group_winner

@@ -170,7 +170,7 @@ class ExperimentRun(Model):
     params = JSONField()
     status = CharField()
     metrics = JSONField()
-    parent_run_id = ForeignKey('self', null=True)
+    parent_id = ForeignKey('self', null=True)
     created_at = DateTimeField()
 
 class ExperimentMetric(Model):
@@ -293,6 +293,23 @@ config/
 - 策略代码执行在隔离环境
 - 资源限制（CPU、内存、时间）
 - 可配置审核流程（人工/AI 二次校验）
+
+### 10.4 AI 驱动：数据需求与建议
+
+- 由 AI 根据应用与策略上下文生成「数据需求」等建议（如「需要最近20年的足球数据」）。
+- **接口**：`GET /api/v1/research/recommendations?application=worldcup`
+- **返回**：`message`（自然语言说明）、`requirements`（可选结构化）。
+- 控制台在应用页提供「获取数据建议」按钮，点击后请求该接口并展示结果（不自动请求）。
+
+### 10.5 一轮预测流程（开关驱动）
+
+- **触发**：控制台「世界杯预测」页提供「启动一轮预测」按钮（开关），点击后执行一轮流程，不随页面加载自动请求。
+- **流程**：程序获取数据 → 运行预测算法 → 对比预测结果 → AI 给出改进意见 → 经人工确认后程序执行改进。
+- **接口**：
+  - `POST /api/v1/research/start-prediction-round`：启动一轮，创建带 `workflow_type=worldcup_round` 的实验并异步执行预测与 AI 建议，返回 `run_id`。
+  - `POST /api/v1/experiments/{run_id}/confirm-improvements`：人工确认后执行改进，将阶段推进为「执行改进中」并标记「已完成」。
+- **流程状态**：通过实验的 `params.workflow_phase` 存储：`running` → `ai_suggestions_pending` → `improving` → `done`；`params.ai_suggestions` 存 AI 改进建议文案。
+- **展示**：实验管理 → 实验列表的列表项中增加「阶段」列，展示当前流程阶段（预测中 / AI建议待确认 / 执行改进中 / 已完成）；实验详情页在阶段为「AI建议待确认」时展示建议内容及「确认并执行改进」按钮。
 
 ---
 

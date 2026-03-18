@@ -1,0 +1,131 @@
+{% extends 'console/base.html' %}
+{% load static console_static %}
+{% block title %}实验详情{% endblock %}
+{% block page_title %}实验详情 - {{ pk }}{% endblock %}
+{% block content %}
+{% csrf_token %}
+<div class="mb-4">
+  <a href="/console/experiments/" class="text-blue-600 hover:underline">← 返回实验管理</a>
+</div>
+<div id="detail-content" class="space-y-4">
+  <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{% static_ver 'console/js/main.js' %}"></script>
+<script>
+const experimentId = {{ pk }};
+function escapeHtml(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function applyImprovements() {
+  var checkboxes = document.querySelectorAll('input[name="improvement-item"]:checked');
+  var selectedIndices = Array.from(checkboxes).map(function(c) { return parseInt(c.value, 10); });
+  var supplementary = (document.getElementById('supplementary') && document.getElementById('supplementary').value) || '';
+  var btn = document.getElementById('btn-apply-improvements');
+  var progressEl = document.getElementById('improvement-progress');
+  var resultEl = document.getElementById('improvement-result');
+  if (btn) btn.disabled = true;
+  if (progressEl) { progressEl.style.display = 'block'; progressEl.innerHTML = '<p class="text-sm text-gray-600">改进中…</p>'; }
+  if (resultEl) resultEl.style.display = 'none';
+  fetch('/api/v1/experiments/' + experimentId + '/confirm-improvements', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || ''
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({ selected_indices: selectedIndices, supplementary: supplementary })
+  }).then(function(r) { return r.json(); }).then(function(j) {
+    if (btn) btn.disabled = false;
+    if (progressEl) progressEl.style.display = 'none';
+    if (resultEl) {
+      resultEl.style.display = 'block';
+      if (j.errorCode === 0) {
+        var data = j.data || {};
+        var process = data.process || [];
+        var processHtml = process.length ? '<ol class="list-decimal list-inside text-sm text-gray-700 mt-2">' + process.map(function(p) { return '<li>' + escapeHtml(p) + '</li>'; }).join('') + '</ol>' : '';
+        var resultMsg = escapeHtml(data.message || '改进已完成。');
+        var linkHtml = data.new_run_id ? ' <a href="/console/experiments/' + data.new_run_id + '/" class="text-blue-600 hover:underline">查看跟进实验 #' + data.new_run_id + '</a>' : '';
+        resultEl.innerHTML = '<div class="p-3 bg-green-50 border border-green-200 rounded"><p class="font-medium text-green-800">结果</p>' + processHtml + '<p class="mt-2 font-medium">' + resultMsg + linkHtml + '</p></div>';
+      } else {
+        resultEl.innerHTML = '<div class="p-3 bg-red-50 border border-red-200 rounded"><p class="font-medium text-red-800">失败</p><p class="text-sm mt-1">' + escapeHtml(j.message || '操作失败') + '</p></div>';
+      }
+    }
+  }).catch(function(e) {
+    if (btn) btn.disabled = false;
+    if (progressEl) progressEl.style.display = 'none';
+    if (resultEl) { resultEl.style.display = 'block'; resultEl.innerHTML = '<div class="p-3 bg-red-50 border border-red-200 rounded"><p class="text-red-800">请求失败: ' + escapeHtml(e.message) + '</p></div>'; }
+  });
+}
+fetch('/api/v1/experiments/' + experimentId)
+  .then(r => r.json())
+  .then(j => {
+    const el = document.getElementById('detail-content');
+    if (j.errorCode !== 0) { el.innerHTML = '<p class="text-red-500">' + escapeHtml(j.message || '加载失败') + '</p>'; return; }
+    const d = j.data;
+    let phaseHtml = '';
+    if (d.workflow_phase_label) {
+      phaseHtml = '<div class="card"><div class="card-header"><h3 class="font-semibold">流程阶段</h3></div><div class="card-body"><p><strong>阶段:</strong> ' + escapeHtml(d.workflow_phase_label) + '</p></div></div>';
+    }
+    let suggestionsHtml = '';
+    if (d.ai_suggestions || (d.ai_suggestions_list && d.ai_suggestions_list.length) || d.workflow_phase === 'ai_suggestions_pending' || (d.workflow_phase === 'done' && d.confirmed_improvements_at)) {
+      suggestionsHtml = '<div class="card border-l-4 border-l-blue-500"><div class="card-header"><h3 class="font-semibold">🤖 AI 改进建议</h3></div><div class="card-body">';
+      if (d.workflow_phase === 'ai_suggestions_pending') {
+        var list = d.ai_suggestions_list || [];
+        if (list.length) {
+          suggestionsHtml += '<p class="text-sm text-gray-600 mb-2">勾选要采纳的建议，可补充说明，再点击「执行改进」启动新一轮预测。</p><ul class="list-none space-y-2 mb-3">';
+          for (var i = 0; i < list.length; i++) {
+            suggestionsHtml += '<li><label class="flex items-start gap-2 cursor-pointer"><input type="checkbox" name="improvement-item" value="' + i + '" class="mt-1"> <span class="text-sm">' + escapeHtml(list[i]) + '</span></label></li>';
+          }
+          suggestionsHtml += '</ul>';
+        } else {
+          var raw = (d.ai_suggestions && String(d.ai_suggestions).trim()) ? d.ai_suggestions : '（暂无建议内容）';
+          suggestionsHtml += '<pre class="text-sm whitespace-pre-wrap">' + escapeHtml(raw) + '</pre><ul class="list-none space-y-2 mb-3"><li><label class="flex items-start gap-2 cursor-pointer"><input type="checkbox" name="improvement-item" value="0" class="mt-1"> <span class="text-sm">采纳上述建议</span></label></li></ul>';
+        }
+        suggestionsHtml += '<label class="block text-sm text-gray-600 mt-2">补充信息（可选）</label><textarea id="supplementary" rows="3" class="w-full border rounded p-2 text-sm mt-1" placeholder="可输入额外说明或约束…"></textarea>';
+        suggestionsHtml += '<div id="improvement-progress" style="display:none;" class="mt-3"></div><div id="improvement-result" style="display:none;" class="mt-3"></div>';
+        suggestionsHtml += '<button type="button" id="btn-apply-improvements" class="btn btn-primary mt-3">执行改进</button>';
+      } else {
+        var suggestionText = (d.ai_suggestions && String(d.ai_suggestions).trim()) ? d.ai_suggestions : '（无）';
+        suggestionsHtml += '<pre class="text-sm whitespace-pre-wrap">' + escapeHtml(suggestionText) + '</pre>';
+        if (d.confirmed_improvements_at) {
+          var confirmedTime = d.confirmed_improvements_at.replace('T', ' ').replace('Z', ' UTC').slice(0, 19);
+          suggestionsHtml += '<p class="mt-3 text-sm text-green-700 font-medium">✓ 已确认：' + escapeHtml(confirmedTime) + ' 已执行改进。</p>';
+          if (d.improvement_follow_up_run_id) {
+            suggestionsHtml += '<p class="mt-1 text-sm">跟进实验：<a href="/console/experiments/' + d.improvement_follow_up_run_id + '/" class="text-blue-600 hover:underline">#' + d.improvement_follow_up_run_id + '</a></p>';
+          }
+        }
+      }
+      suggestionsHtml += '</div></div>';
+    }
+    el.innerHTML = `
+      <div class="card">
+        <div class="card-header"><h3 class="font-semibold">基本信息</h3></div>
+        <div class="card-body">
+          <p><strong>id:</strong> ${d.id}</p>
+          ${d.v ? '<p><strong>数据版本 v:</strong> ' + d.v + '</p>' : ''}
+          <p><strong>名称:</strong> ${escapeHtml(d.name || '-')}</p>
+          <p><strong>策略:</strong> ${escapeHtml(d.strategy_id || '-')}</p>
+          <p><strong>状态:</strong> <span class="badge badge-${d.status === 'SUCCESS' ? 'success' : 'warning'}">${escapeHtml(d.status)}</span></p>
+          <p><strong>创建时间:</strong> ${escapeHtml(d.created_at || '-')}</p>
+          ${d.error_message ? '<p class="text-red-600"><strong>错误:</strong> ' + escapeHtml(d.error_message) + '</p>' : ''}
+        </div>
+      </div>
+      ${phaseHtml}
+      ${suggestionsHtml}
+      <div class="card">
+        <div class="card-header"><h3 class="font-semibold">参数</h3></div>
+        <div class="card-body"><pre class="text-sm overflow-x-auto">${escapeHtml(JSON.stringify(d.params || {}, null, 2))}</pre></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><h3 class="font-semibold">指标</h3></div>
+        <div class="card-body"><pre class="text-sm overflow-x-auto">${escapeHtml(JSON.stringify(d.metrics || {}, null, 2))}</pre></div>
+      </div>
+    `;
+    var btn = document.getElementById('btn-apply-improvements');
+    if (btn) btn.onclick = applyImprovements;
+  })
+  .catch(e => {
+    document.getElementById('detail-content').innerHTML = '<p class="text-red-500">加载失败: ' + escapeHtml(e.message) + '</p>';
+  });
+</script>
+{% endblock %}

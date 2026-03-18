@@ -1,0 +1,44 @@
+{% extends 'console/base.html' %}
+{% block title %}仪表盘{% endblock %}
+{% block page_title %}仪表盘{% endblock %}
+{% block content %}
+<div class="mb-8">
+  <h2 class="text-2xl font-bold text-gray-800 mb-2">Athena 预测平台</h2>
+  <p class="text-gray-600">实验管理、策略配置、回测与可观测</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+  <div class="card">
+    <div class="card-body">
+      <h3 class="text-lg font-semibold mb-2">实验管理</h3>
+      <p class="text-gray-600 text-sm mb-4">创建、查看、对比实验</p>
+      <a href="{% url 'console:experiment-list' %}" class="btn btn-primary">进入实验管理</a>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body">
+      <h3 class="text-lg font-semibold mb-2">策略管理</h3>
+      <p class="text-gray-600 text-sm mb-4">已注册策略及参数 schema</p>
+      <a href="{% url 'console:strategy-list' %}" class="btn btn-primary">查看策略</a>
+    </div>
+  </div>
+</div>
+
+<section class="mt-10">
+  <h3 class="text-lg font-semibold text-gray-800 mb-4">应用</h3>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="card border-l-4 border-l-green-500">
+      <div class="card-body">
+        <h4 class="text-lg font-semibold mb-2">⚽ 世界杯预测</h4>
+        <p class="text-gray-600 text-sm mb-4">胜平负预测、数据管理、策略实验</p>
+        <a href="{% url 'console:worldcup-app' %}" class="btn btn-primary">进入世界杯预测</a>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="mt-8 card">
+  <div class="card-body">
+    <h3 class="text-lg font-semibold mb-4">API 端点</h3>
+    <p class="font-mono text-sm">/api/v1/experiments  /api/v1/strategies</p>
+  </div>
+</div>
+{% endblock %}

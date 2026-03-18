@@ -1,0 +1,199 @@
+"""Experiment REST API per DESIGN_SPECIFICATIONS §6"""
+import logging
+import threading
+
+from rest_framework.views import APIView
+
+from rest_framework.request import Request
+
+from common.utils.http_util import resp_ok, resp_err, resp_exception, safe_request_data, with_type
+from common.consts.response_const import RET_INVALID_PARAM, RET_RESOURCE_NOT_FOUND
+
+from platform_app.models import ExperimentRun
+from platform_app.repos.experiment_repo import (
+    create_run,
+    update_run_status,
+    get_run,
+    list_runs,
+)
+from platform_app.services.prediction_round import (
+    apply_improvements,
+    get_workflow_phase_label,
+)
+from platform_core.experiment.runner import ExperimentConfig
+from platform_core.strategy.registry import get_strategy_schema
+from platform_app.services.experiment_runner import get_runner
+
+logger = logging.getLogger(__name__)
+
+
+def _run_experiment_async(pk: int, config: ExperimentConfig):
+    try:
+        runner = get_runner(config.data_config)
+        result = runner.run(config)
+        update_run_status(
+            pk,
+            result.status,
+            metrics=result.metrics,
+            error_message=result.error_message,
+        )
+    except Exception as e:
+        logger.exception("Experiment %s failed: %s", pk, e)
+        update_run_status(pk, "FAILED", error_message=str(e))
+
+
+class ExperimentListCreateView(APIView):
+    """POST /api/v1/experiments - create and start; GET - list."""
+
+    def post(self, request: Request):
+        try:
+            data = safe_request_data(request)
+            name = data.get("name") or "Unnamed"
+            strategy_id = data.get("strategy_id")
+            if not strategy_id:
+                return resp_err("strategy_id required", code=RET_INVALID_PARAM)
+            params = data.get("params") or {}
+            data_config = data.get("data_config") or {}
+            task = data_config.get("task")
+            if task:
+                schema = get_strategy_schema(strategy_id)
+                if schema and getattr(schema, "supported_tasks", None) and task not in schema.supported_tasks:
+                    return resp_err(
+                        f"策略 {strategy_id} 不支持任务 {task}（支持: {schema.supported_tasks}）",
+                        code=RET_INVALID_PARAM,
+                    )
+
+            run = create_run(
+                name=name,
+                strategy_id=strategy_id,
+                params=params,
+                data_config=data_config,
+            )
+            config = ExperimentConfig(
+                name=name,
+                strategy_id=strategy_id,
+                params=params,
+                data_config=data_config,
+            )
+            t = threading.Thread(target=_run_experiment_async, args=(run.id, config))
+            t.daemon = True
+            t.start()
+            return resp_ok({"id": run.id, "status": "PENDING"})
+        except Exception as e:
+            logger.exception("Create experiment failed: %s", e)
+            return resp_exception(e)
+
+    def get(self, request: Request):
+        try:
+            limit = int(with_type(request.GET.get("limit") or 50))
+            offset = int(with_type(request.GET.get("offset") or 0))
+            limit = min(max(1, limit), 200)
+            offset = max(0, offset)
+            status = request.GET.get("status")
+            strategy_id = request.GET.get("strategy_id")
+            strategy_ids_raw = request.GET.get("strategy_ids")
+            strategy_ids = [s.strip() for s in strategy_ids_raw.split(",") if s.strip()] if strategy_ids_raw else None
+
+            items, total = list_runs(
+                limit=limit, offset=offset, status=status,
+                strategy_id=strategy_id, strategy_ids=strategy_ids,
+            )
+            data = []
+            for r in items:
+                params = r.params or {}
+                workflow_phase = params.get("workflow_phase")
+                data.append({
+                    "id": r.id,
+                    "name": r.name,
+                    "strategy_id": r.strategy_id,
+                    "status": r.status_label,
+                    "metrics": r.metrics,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "workflow_phase": workflow_phase,
+                    "workflow_phase_label": get_workflow_phase_label(workflow_phase),
+                })
+            return resp_ok({"data": data, "total": total})
+        except Exception as e:
+            logger.exception("List experiments failed: %s", e)
+            return resp_exception(e)
+
+
+class ExperimentDetailView(APIView):
+    """GET /api/v1/experiments/{pk} - detail; DELETE - delete record."""
+
+    def get(self, request: Request, pk: int):
+        run = get_run(pk)
+        if not run:
+            return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        params = run.params or {}
+        workflow_phase = params.get("workflow_phase")
+        ai_suggestions_raw = params.get("ai_suggestions")
+        ai_suggestions_list = [
+            line.strip() for line in (str(ai_suggestions_raw or "").strip().split("\n"))
+            if line.strip()
+        ]
+        return resp_ok({
+            "id": run.id,
+            "name": run.name,
+            "strategy_id": run.strategy_id,
+            "params": run.params,
+            "data_config": run.data_config,
+            "status": run.status_label,
+            "metrics": run.metrics,
+            "artifacts": run.artifacts,
+            "created_at": run.created_at.isoformat() if run.created_at else None,
+            "error_message": run.error_message,
+            "workflow_phase": workflow_phase,
+            "workflow_phase_label": get_workflow_phase_label(workflow_phase),
+            "ai_suggestions": ai_suggestions_raw,
+            "ai_suggestions_list": ai_suggestions_list,
+            "confirmed_improvements_at": params.get("confirmed_improvements_at"),
+            "improvement_follow_up_run_id": params.get("improvement_follow_up_run_id"),
+            "v": run.v,
+        })
+
+    def delete(self, request: Request, pk: int):
+        """DELETE /api/v1/experiments/{pk} - delete experiment record."""
+        run = get_run(pk)
+        if not run:
+            return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        run.delete()
+        return resp_ok({"id": pk, "deleted": True})
+
+
+class ExperimentCancelView(APIView):
+    """POST /api/v1/experiments/{pk}/cancel"""
+
+    def post(self, request: Request, pk: int):
+        run = get_run(pk)
+        if not run:
+            return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        if run.status == ExperimentRun.Status.RUNNING:
+            update_run_status(pk, "CANCELLED")
+        return resp_ok({"id": pk, "status": "CANCELLED"})
+
+
+class ExperimentConfirmImprovementsView(APIView):
+    """POST /api/v1/experiments/{pk}/confirm-improvements — 执行改进：勾选建议+补充信息，启动跟进实验"""
+
+    def post(self, request: Request, pk: int):
+        run = get_run(pk)
+        if not run:
+            return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        try:
+            data = safe_request_data(request, of_type=dict) or {}
+            selected_indices = data.get("selected_indices")
+            if selected_indices is not None and not isinstance(selected_indices, list):
+                selected_indices = [int(x) for x in str(selected_indices).split(",") if str(x).strip().isdigit()]
+            elif isinstance(selected_indices, list):
+                selected_indices = [int(x) for x in selected_indices if isinstance(x, (int, float)) or (isinstance(x, str) and x.strip().isdigit())]
+            supplementary = data.get("supplementary")
+            if supplementary is not None and not isinstance(supplementary, str):
+                supplementary = str(supplementary)
+            out = apply_improvements(pk, selected_indices=selected_indices, supplementary=supplementary)
+            if out.get("error"):
+                return resp_err(out["error"], code=RET_INVALID_PARAM)
+            return resp_ok(out)
+        except Exception as e:
+            logger.exception("Apply improvements failed: %s", e)
+            return resp_exception(e)
