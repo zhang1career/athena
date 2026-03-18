@@ -4,6 +4,7 @@
 import logging
 import os
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -32,6 +33,10 @@ logger = logging.getLogger(__name__)
 WORKFLOW_TYPE = "workflow_type"
 WORKFLOW_PHASE = "workflow_phase"
 AI_SUGGESTIONS = "ai_suggestions"
+CONFIRMED_IMPROVEMENTS_AT = "confirmed_improvements_at"
+IMPROVEMENT_FOLLOW_UP_RUN_ID = "improvement_follow_up_run_id"
+APPLIED_SUGGESTIONS = "applied_suggestions"
+SUPPLEMENTARY = "supplementary"
 ROUND_DATA_SOURCE_ID = "round_data_source_id"
 DATA_VERSION_V = "data_version_v"
 DATA_SRC_ID = "data_src_id"
@@ -312,7 +317,21 @@ def start_prediction_round(
     return {"id": run.id, "status": "PENDING", "data_version_v": now}
 
 
-def confirm_and_apply_improvements(run_id: int) -> Dict[str, Any]:
+def _suggestions_to_list(suggestions_text: Optional[str]) -> List[str]:
+    """将 AI 建议文案按行拆成列表，过滤空行。"""
+    if not suggestions_text or not str(suggestions_text).strip():
+        return []
+    return [line.strip() for line in str(suggestions_text).strip().split("\n") if line.strip()]
+
+
+def apply_improvements(
+    run_id: int,
+    selected_indices: Optional[List[int]] = None,
+    supplementary: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    执行改进：记录用户勾选的建议与补充信息，启动新一轮预测（跟进实验），返回过程与结果。
+    """
     run = get_run(run_id)
     if not run:
         return {"error": "实验不存在"}
@@ -320,7 +339,63 @@ def confirm_and_apply_improvements(run_id: int) -> Dict[str, Any]:
     if params.get(WORKFLOW_TYPE) != "worldcup_round":
         return {"error": "该实验不是预测流程运行"}
     if params.get(WORKFLOW_PHASE) != PHASE_AI_SUGGESTIONS_PENDING:
-        return {"error": f"当前阶段不可确认: {params.get(WORKFLOW_PHASE)}"}
+        return {"error": f"当前阶段不可执行改进: {params.get(WORKFLOW_PHASE)}"}
+
+    suggestions_list = _suggestions_to_list(params.get("ai_suggestions"))
+    indices = list(selected_indices or [])
+    applied_suggestions = [suggestions_list[i] for i in indices if 0 <= i < len(suggestions_list)]
+    supp = (supplementary or "").strip()
+
+    process: List[str] = []
+    process.append("已记录您选择的 %d 条建议与补充信息。" % (len(applied_suggestions) + (1 if supp else 0)))
     update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_IMPROVING})
-    update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_DONE})
-    return {"id": run_id, "workflow_phase": PHASE_DONE}
+
+    data_src_id = params.get(DATA_SRC_ID)
+    if not data_src_id:
+        update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_AI_SUGGESTIONS_PENDING})
+        return {"error": "缺少数据源信息，无法启动跟进实验", "process": process}
+
+    out = start_prediction_round(
+        application="worldcup",
+        data_src_id=int(data_src_id),
+        data_file_version=params.get("data_file_version"),
+        patch_batch_versions=params.get("patch_batch_versions"),
+    )
+    if out.get("error"):
+        update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_AI_SUGGESTIONS_PENDING})
+        process.append("启动跟进实验失败: %s" % out["error"])
+        return {"error": out["error"], "process": process}
+
+    new_run_id = out.get("id")
+    process.append("已创建跟进实验 #%s。" % new_run_id)
+    process.append("已启动新一轮预测，新实验运行中。")
+
+    update_run_params(
+        new_run_id,
+        **{
+            "improvement_from_run_id": run_id,
+            APPLIED_SUGGESTIONS: applied_suggestions,
+            SUPPLEMENTARY: supp,
+        },
+    )
+    confirmed_at = datetime.now(timezone.utc).isoformat()
+    update_run_params(
+        run_id,
+        **{
+            WORKFLOW_PHASE: PHASE_DONE,
+            CONFIRMED_IMPROVEMENTS_AT: confirmed_at,
+            IMPROVEMENT_FOLLOW_UP_RUN_ID: new_run_id,
+            APPLIED_SUGGESTIONS: applied_suggestions,
+            SUPPLEMENTARY: supp,
+        },
+    )
+    process.append("当前实验已标记为「已完成」，可前往跟进实验查看新结果。")
+
+    return {
+        "id": run_id,
+        "workflow_phase": PHASE_DONE,
+        "confirmed_at": confirmed_at,
+        "new_run_id": new_run_id,
+        "process": process,
+        "message": "已根据您选择的建议启动新一轮预测，跟进实验 #%s。" % new_run_id,
+    }

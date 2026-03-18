@@ -17,7 +17,7 @@ from platform_app.repos.experiment_repo import (
     list_runs,
 )
 from platform_app.services.prediction_round import (
-    confirm_and_apply_improvements,
+    apply_improvements,
     get_workflow_phase_label,
 )
 from platform_core.experiment.runner import ExperimentConfig
@@ -127,6 +127,11 @@ class ExperimentDetailView(APIView):
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         params = run.params or {}
         workflow_phase = params.get("workflow_phase")
+        ai_suggestions_raw = params.get("ai_suggestions")
+        ai_suggestions_list = [
+            line.strip() for line in (str(ai_suggestions_raw or "").strip().split("\n"))
+            if line.strip()
+        ]
         return resp_ok({
             "id": run.id,
             "name": run.name,
@@ -140,7 +145,10 @@ class ExperimentDetailView(APIView):
             "error_message": run.error_message,
             "workflow_phase": workflow_phase,
             "workflow_phase_label": get_workflow_phase_label(workflow_phase),
-            "ai_suggestions": params.get("ai_suggestions"),
+            "ai_suggestions": ai_suggestions_raw,
+            "ai_suggestions_list": ai_suggestions_list,
+            "confirmed_improvements_at": params.get("confirmed_improvements_at"),
+            "improvement_follow_up_run_id": params.get("improvement_follow_up_run_id"),
             "v": run.v,
         })
 
@@ -166,17 +174,26 @@ class ExperimentCancelView(APIView):
 
 
 class ExperimentConfirmImprovementsView(APIView):
-    """POST /api/v1/experiments/{pk}/confirm-improvements — 人工确认后执行改进"""
+    """POST /api/v1/experiments/{pk}/confirm-improvements — 执行改进：勾选建议+补充信息，启动跟进实验"""
 
     def post(self, request: Request, pk: int):
         run = get_run(pk)
         if not run:
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         try:
-            out = confirm_and_apply_improvements(pk)
+            data = safe_request_data(request, of_type=dict) or {}
+            selected_indices = data.get("selected_indices")
+            if selected_indices is not None and not isinstance(selected_indices, list):
+                selected_indices = [int(x) for x in str(selected_indices).split(",") if str(x).strip().isdigit()]
+            elif isinstance(selected_indices, list):
+                selected_indices = [int(x) for x in selected_indices if isinstance(x, (int, float)) or (isinstance(x, str) and x.strip().isdigit())]
+            supplementary = data.get("supplementary")
+            if supplementary is not None and not isinstance(supplementary, str):
+                supplementary = str(supplementary)
+            out = apply_improvements(pk, selected_indices=selected_indices, supplementary=supplementary)
             if out.get("error"):
                 return resp_err(out["error"], code=RET_INVALID_PARAM)
             return resp_ok(out)
         except Exception as e:
-            logger.exception("Confirm improvements failed: %s", e)
+            logger.exception("Apply improvements failed: %s", e)
             return resp_exception(e)
