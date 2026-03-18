@@ -9,16 +9,22 @@ def compute_metrics(
     y_true: Any,
     y_pred: Any,
     task: str = "auto",
+    y_proba: Any = None,
 ) -> Dict[str, float]:
     """
-    Compute metrics for predictions.
-    task: 'classification' | 'regression' | 'auto'
+    Unified evaluation: compute metrics by task.
+    task: 'classification' | 'regression' | 'match_1x2' | 'group_winner' | 'auto'
+    y_proba: optional probability array for binary (e.g. group_winner) to compute AUC.
     """
     y_true = np.asarray(y_true)
     y_pred = np.asarray(y_pred)
 
     if task == "auto":
-        task = "classification" if len(np.unique(y_true)) <= 20 else "regression"
+        n_unique = len(np.unique(y_true))
+        task = "classification" if n_unique <= 20 else "regression"
+    # Normalize task to classification for match_1x2 / group_winner
+    if task in ("match_1x2", "group_winner"):
+        task = "classification"
 
     metrics = {}
     if task == "classification":
@@ -31,6 +37,16 @@ def compute_metrics(
                 metrics["log_loss"] = float(log_loss(y_true, y_pred, labels=np.unique(y_true)))
         except Exception:
             pass
+        # Binary: add AUC when proba provided
+        if y_proba is not None and len(np.unique(y_true)) == 2:
+            try:
+                from sklearn.metrics import roc_auc_score
+                proba = np.asarray(y_proba)
+                if proba.ndim >= 2:
+                    proba = proba[:, 1]
+                metrics["auc"] = float(roc_auc_score(y_true, proba))
+            except Exception:
+                pass
     else:
         from sklearn.metrics import mean_absolute_error, mean_squared_error
         metrics["mae"] = float(mean_absolute_error(y_true, y_pred))

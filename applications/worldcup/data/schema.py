@@ -43,3 +43,26 @@ def match_records_to_arrays(
             X_rows.append(row)
             y_list.append(r.to_target_class())
     return np.array(X_rows, dtype=float), np.array(y_list)
+
+
+def group_records_to_arrays(
+    records: List[dict],
+    feature_cols: List[str],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Convert group_winner records (dicts with features, is_winner) to X, y arrays."""
+    X_rows = []
+    y_list = []
+    for r in records:
+        if not isinstance(r, dict):
+            continue
+        feats = r.get("features") or {}
+        y_val = r.get("is_winner")
+        if y_val is None:
+            continue
+        try:
+            y_list.append(int(y_val))
+        except (TypeError, ValueError):
+            continue
+        row = [feats.get(c, 0) for c in feature_cols]
+        X_rows.append(row)
+    return np.array(X_rows, dtype=float), np.array(y_list)

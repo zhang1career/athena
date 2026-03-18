@@ -56,6 +56,26 @@ def get_workflow_phase_label(phase: Optional[str]) -> str:
     return PHASE_LABELS.get(phase, phase)
 
 
+# 命题(task) -> 默认策略
+TASK_DEFAULT_STRATEGY = {
+    "group_winner": "lightgbm_group_winner",
+    "match_1x2": "lightgbm_match",
+}
+
+
+def _strategy_id_for_task(task: str) -> str:
+    return TASK_DEFAULT_STRATEGY.get(task, "lightgbm_match")
+
+
+def _strategy_supports_task(strategy_id: str, task: str) -> bool:
+    from platform_core.strategy.registry import get_strategy_schema
+    schema = get_strategy_schema(strategy_id)
+    if not schema:
+        return False
+    supported = getattr(schema, "supported_tasks", None) or []
+    return task in supported
+
+
 def _get_openai_client():
     base_url = os.environ.get("AIGC_API_URL") or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1"
     api_key = os.environ.get("AIGC_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
@@ -226,7 +246,7 @@ def start_prediction_round(
     patch_batch_versions = sorted(set(selected_cts + ([new_batch_ct] if new_batch_ct else [])))
 
     try:
-        composed_records, snapshot_ct, patch_count = load_composed_records(
+        composed_records, snapshot_ct, patch_count, envelope_meta = load_composed_records(
             data_src_id=data_src_id,
             data_file_version=data_file_v,
             patch_batch_versions=patch_batch_versions,
@@ -238,7 +258,7 @@ def start_prediction_round(
                 format_type, records = fetch_full_records(resolved_url)
                 if records:
                     save_full_snapshot(version_v=now, data_src_id=data_src_id)
-                    composed_records, snapshot_ct, patch_count = load_composed_records(
+                    composed_records, snapshot_ct, patch_count, envelope_meta = load_composed_records(
                         data_src_id=data_src_id,
                         data_file_version=data_file_v,
                         patch_batch_versions=patch_batch_versions,
@@ -250,6 +270,14 @@ def start_prediction_round(
     if not composed_records:
         return {"error": "当前版本缺少可用基础数据。", "suggestion": "请先保存 data_file 快照或确认 data_file_version 正确。"}
 
+    task = (envelope_meta or {}).get("task") or (envelope_meta or {}).get("data_type") or "match_1x2"
+    strategy_id = _strategy_id_for_task(task)
+    if not _strategy_supports_task(strategy_id, task):
+        return {
+            "error": f"任务 {task} 无可用策略或策略不兼容。",
+            "suggestion": f"请为 task={task} 注册并启用支持该任务的策略（如 lightgbm_group_winner）。",
+        }
+
     try:
         ds = DataSrc.objects.get(pk=data_src_id)
         dest_path = (ds.raw_path or "").strip()
@@ -257,10 +285,11 @@ def start_prediction_round(
     except DataSrc.DoesNotExist:
         dest_path = ""
         source_url = ""
-    composed_path = write_composed_records_file(now, composed_records, dest_path=dest_path)
+    composed_path = write_composed_records_file(
+        now, composed_records, dest_path=dest_path, envelope_meta=envelope_meta
+    )
 
     name = "世界杯预测一轮"
-    strategy_id = "lightgbm_match"
     params = {
         WORKFLOW_TYPE: "worldcup_round",
         WORKFLOW_PHASE: PHASE_RUNNING,
@@ -271,8 +300,9 @@ def start_prediction_round(
         "source_url": source_url,
         UPDATE_PATCH_COUNT: patch_count,
         "composed_from_snapshot_ct": snapshot_ct,
+        "task": task,
     }
-    data_config = {"path": composed_path, "format": "json", DATA_VERSION_V: now}
+    data_config = {"path": composed_path, "format": "json", DATA_VERSION_V: now, "task": task}
 
     run = create_run(name=name, strategy_id=strategy_id, params=params, data_config=data_config, v=now)
     config = ExperimentConfig(name=name, strategy_id=strategy_id, params=params, data_config=data_config)

@@ -21,6 +21,7 @@ from platform_app.services.prediction_round import (
     get_workflow_phase_label,
 )
 from platform_core.experiment.runner import ExperimentConfig
+from platform_core.strategy.registry import get_strategy_schema
 from platform_app.services.experiment_runner import get_runner
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,14 @@ class ExperimentListCreateView(APIView):
                 return resp_err("strategy_id required", code=RET_INVALID_PARAM)
             params = data.get("params") or {}
             data_config = data.get("data_config") or {}
+            task = data_config.get("task")
+            if task:
+                schema = get_strategy_schema(strategy_id)
+                if schema and getattr(schema, "supported_tasks", None) and task not in schema.supported_tasks:
+                    return resp_err(
+                        f"策略 {strategy_id} 不支持任务 {task}（支持: {schema.supported_tasks}）",
+                        code=RET_INVALID_PARAM,
+                    )
 
             run = create_run(
                 name=name,

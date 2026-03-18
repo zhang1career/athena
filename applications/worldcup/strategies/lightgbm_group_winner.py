@@ -1,13 +1,13 @@
-"""LightGBM strategy for match outcome prediction (1/X/2)."""
+"""LightGBM strategy for group winner prediction (binary: is_winner 0/1)."""
 import numpy as np
 import pandas as pd
 from platform_core.strategy.base import Strategy, PredictResult, StrategySchema
 from platform_core.strategy.registry import register_strategy
 
 
-@register_strategy("lightgbm_match")
-class LightGBMMatchStrategy(Strategy):
-    """LightGBM classifier for match result (1/X/2)."""
+@register_strategy("lightgbm_group_winner")
+class LightGBMGroupWinnerStrategy(Strategy):
+    """LightGBM binary classifier for group winner (is_winner 0/1)."""
 
     def __init__(self, n_estimators: int = 100, max_depth: int = 5, learning_rate: float = 0.1, **kwargs):
         self.n_estimators = n_estimators
@@ -61,12 +61,12 @@ class LightGBMMatchStrategy(Strategy):
     @classmethod
     def get_schema(cls) -> StrategySchema:
         return StrategySchema(
-            name="LightGBMMatch",
+            name="LightGBMGroupWinner",
             version="0.1.0",
             params_schema={
                 "n_estimators": {"type": "integer", "default": 100},
                 "max_depth": {"type": "integer", "default": 5},
                 "learning_rate": {"type": "number", "default": 0.1},
             },
-            supported_tasks=["match_1x2"],
+            supported_tasks=["group_winner"],
         )

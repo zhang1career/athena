@@ -40,8 +40,9 @@ fetch('/api/v1/experiments/' + experimentId)
       phaseHtml = '<div class="card"><div class="card-header"><h3 class="font-semibold">流程阶段</h3></div><div class="card-body"><p><strong>阶段:</strong> ' + escapeHtml(d.workflow_phase_label) + '</p></div></div>';
     }
     let suggestionsHtml = '';
-    if (d.ai_suggestions) {
-      suggestionsHtml = '<div class="card border-l-4 border-l-blue-500"><div class="card-header"><h3 class="font-semibold">🤖 AI 改进建议</h3></div><div class="card-body"><pre class="text-sm whitespace-pre-wrap">' + escapeHtml(d.ai_suggestions) + '</pre>';
+    if (d.ai_suggestions || d.workflow_phase === 'ai_suggestions_pending') {
+      var suggestionText = (d.ai_suggestions && String(d.ai_suggestions).trim()) ? d.ai_suggestions : '（暂无建议内容或未配置 AI）';
+      suggestionsHtml = '<div class="card border-l-4 border-l-blue-500"><div class="card-header"><h3 class="font-semibold">🤖 AI 改进建议</h3></div><div class="card-body"><pre class="text-sm whitespace-pre-wrap">' + escapeHtml(suggestionText) + '</pre>';
       if (d.workflow_phase === 'ai_suggestions_pending') {
         suggestionsHtml += '<button type="button" id="btn-confirm-improvements" class="btn btn-primary mt-3">确认并执行改进</button></div></div>';
       } else {

@@ -34,12 +34,15 @@ def list_strategies() -> List[dict]:
     result = []
     for sid, cls in _REGISTRY.items():
         schema = cls.get_schema()
-        result.append({
+        item = {
             "id": sid,
             "name": schema.name,
             "version": schema.version,
             "params_schema": schema.params_schema,
-        })
+        }
+        if getattr(schema, "supported_tasks", None):
+            item["supported_tasks"] = schema.supported_tasks
+        result.append(item)
     return result
 
 

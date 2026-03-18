@@ -45,8 +45,9 @@
     <div class="card-body">
       <h3 class="text-lg font-semibold mb-2">可用策略</h3>
       <ul class="text-sm text-gray-600 space-y-1">
-        <li>• lightgbm_match</li>
-        <li>• elo_baseline</li>
+        <li>• lightgbm_match（比赛胜平负）</li>
+        <li>• elo_baseline（比赛胜平负）</li>
+        <li>• lightgbm_group_winner（小组出线）</li>
       </ul>
     </div>
   </div>
@@ -56,6 +57,7 @@
       <select id="strategy-select" class="border border-gray-300 rounded px-3 py-2 text-sm mb-2 w-full">
         <option value="lightgbm_match">lightgbm_match</option>
         <option value="elo_baseline">elo_baseline</option>
+        <option value="lightgbm_group_winner">lightgbm_group_winner</option>
       </select>
       <button id="btn-create" class="btn btn-primary w-full">新建实验</button>
     </div>
@@ -99,7 +101,7 @@
   }
 })();
 const API = '/api/v1/experiments';
-const WC_STRATEGY_IDS = 'lightgbm_match,elo_baseline';
+const WC_STRATEGY_IDS = 'lightgbm_match,elo_baseline,lightgbm_group_winner';
 
 function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function deleteExperiment(runId) {

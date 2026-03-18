@@ -69,6 +69,37 @@ def _load_records_from_json_text(text: str) -> List[Dict[str, Any]]:
     raise ValueError("JSON payload must be object or array")
 
 
+def _parse_json_envelope(
+    text: str,
+) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """
+    若 JSON 根为对象且含 'records'，则视为信封格式，返回 (records, envelope_meta)。
+    否则返回 (原样解析的记录列表, None)。
+    """
+    if not text or not text.strip():
+        return [], None
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return [], None
+    if isinstance(payload, dict) and "records" in payload:
+        records = payload["records"]
+        if not isinstance(records, list):
+            records = []
+        envelope_meta = {
+            k: payload[k]
+            for k in ("data_type", "task", "feature_cols")
+            if k in payload
+        }
+        return records, envelope_meta if envelope_meta else None
+    # 非信封：沿用原逻辑
+    if isinstance(payload, list):
+        return [x for x in payload if isinstance(x, dict)], None
+    if isinstance(payload, dict):
+        return [payload], None
+    return [], None
+
+
 def _infer_format_type(src_url: str) -> int:
     """从 URL 或路径字符串推断格式（用于从 URL 拉取时的解析）。"""
     lower = (src_url or "").lower()
@@ -146,7 +177,7 @@ def save_incremental_patches(version_v: int, patch_dict: Dict[str, Any]) -> int:
 def _record_key(rec: Dict[str, Any]) -> str:
     if not isinstance(rec, dict):
         return ""
-    for k in ("match_id", "id", "data_name", "name"):
+    for k in ("record_id", "match_id", "id", "data_name", "name"):
         v = rec.get(k)
         if v is not None and str(v).strip():
             return str(v).strip()
@@ -180,32 +211,38 @@ def load_composed_records(
     data_src_id: int,
     data_file_version: int,
     patch_batch_versions: List[int],
-) -> Tuple[List[Dict[str, Any]], int, int]:
+) -> Tuple[List[Dict[str, Any]], int, int, Optional[Dict[str, Any]]]:
     """
     按版本号查询并合成数据：
     1) data_file：data_src_id 匹配，ct <= data_file_version，按 ct 倒序取第 1 条
     2) data_patch_batch：ct 精确匹配 patch_batch_versions，按 ct 升序
-    3) 按 batch 的 ct 分组找到 data_patch，按 ct 顺序依次覆盖 base
-    4) 返回合成结果
+    3) 若为信封 JSON，用 records 做 base，并保留 envelope_meta
+    4) 返回 (records, snapshot_ct, patch_count, envelope_meta)
     """
     file_rec = latest_data_file_by_version(data_src_id, data_file_version)
     batches = batches_by_versions(patch_batch_versions)
+    envelope_meta: Optional[Dict[str, Any]] = None
 
     if file_rec:
         if file_rec.file_path and file_rec.file_path.strip():
             full_path = _project_root() / file_rec.file_path.strip()
             format_type = _infer_format_from_path(file_rec.file_path)
             if format_type in (FormatType.EXCEL, FormatType.XLS):
-                body = ""
                 base = []
             else:
                 body = full_path.read_text(encoding="utf-8")
-                base = _load_records_by_format_type(body, format_type)
+                if format_type == FormatType.JSON:
+                    base, envelope_meta = _parse_json_envelope(body)
+                else:
+                    base = _load_records_by_format_type(body, format_type)
         else:
             resolved_url = resolve_data_src_url(file_rec.data_src)
             body = _fetch_body(resolved_url)
             format_type = _infer_format_type(resolved_url)
-            base = _load_records_by_format_type(body, format_type)
+            if format_type == FormatType.JSON:
+                base, envelope_meta = _parse_json_envelope(body)
+            else:
+                base = _load_records_by_format_type(body, format_type)
         snapshot_ct = file_rec.ct
     else:
         base = []
@@ -217,7 +254,7 @@ def load_composed_records(
         patch_count += len(patch_rows)
         _apply_patches(base, patch_rows)
 
-    return base, snapshot_ct, patch_count
+    return base, snapshot_ct, patch_count, envelope_meta
 
 
 def list_patch_batches() -> List[Dict[str, Any]]:
@@ -234,10 +271,12 @@ def write_composed_records_file(
     version_v: int,
     records: List[Dict[str, Any]],
     dest_path: str = "",
+    envelope_meta: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     写入合成数据文件。完整路径为 <dest_path>-<version>.json
     若 dest_path 为空，则使用默认路径 data/worldcup/generated/composed_{version}.json
+    若 envelope_meta 非空，则写出带信封的 JSON（data_type, task, feature_cols, records）。
     """
     if dest_path and dest_path.strip():
         base = Path(dest_path.strip())
@@ -249,5 +288,9 @@ def write_composed_records_file(
         out_dir.mkdir(parents=True, exist_ok=True)
         p = out_dir / f"composed_{version_v}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
+    if envelope_meta:
+        payload = {**envelope_meta, "records": records}
+        p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    else:
+        p.write_text(json.dumps(records, ensure_ascii=False), encoding="utf-8")
     return str(p)

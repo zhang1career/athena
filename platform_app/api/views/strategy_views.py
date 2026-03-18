@@ -5,6 +5,7 @@ import logging
 try:
     from applications.worldcup.strategies import lightgbm_match  # noqa: F401
     from applications.worldcup.strategies import elo_baseline  # noqa: F401
+    from applications.worldcup.strategies import lightgbm_group_winner  # noqa: F401
 except ImportError:
     pass
 
@@ -37,9 +38,12 @@ class StrategySchemaView(APIView):
         schema = get_strategy_schema(strategy_id)
         if not schema:
             return resp_err("Strategy not found", code=RET_RESOURCE_NOT_FOUND)
-        return resp_ok({
+        payload = {
             "id": strategy_id,
             "name": schema.name,
             "version": schema.version,
             "params_schema": schema.params_schema,
-        })
+        }
+        if hasattr(schema, "supported_tasks") and schema.supported_tasks:
+            payload["supported_tasks"] = schema.supported_tasks
+        return resp_ok(payload)

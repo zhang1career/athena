@@ -83,12 +83,18 @@ class LocalRunner(ExperimentRunner):
             # TRAIN
             strategy.fit(X_train, y_train)
 
-            # VALIDATE
+            # VALIDATE (unified evaluation by task)
             metrics = {}
             if X_val is not None and y_val is not None:
                 from platform_core.backtest.engine import compute_metrics
                 result = strategy.predict(X_val)
-                metrics = compute_metrics(y_val, result.predictions)
+                task = (config.data_config or {}).get("task", "auto")
+                metrics = compute_metrics(
+                    y_val,
+                    result.predictions,
+                    task=task,
+                    y_proba=getattr(result, "proba", None),
+                )
 
             # BACKTEST (same as validate for now; full backtest in backtest engine)
             # FINALIZE: metrics already computed

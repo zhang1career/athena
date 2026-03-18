@@ -41,4 +41,5 @@ class EloBaselineStrategy(Strategy):
             params_schema={
                 "threshold": {"type": "number", "default": 0.1},
             },
+            supported_tasks=["match_1x2"],
         )

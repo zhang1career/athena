@@ -1,7 +1,7 @@
 """Strategy base classes per DESIGN_SPECIFICATIONS §1"""
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -22,6 +22,7 @@ class StrategySchema:
     name: str
     version: str
     params_schema: Dict[str, dict]  # JSON Schema style
+    supported_tasks: List[str] = field(default_factory=list)  # e.g. ["match_1x2"], ["group_winner"]
 
 
 class Strategy(ABC):
