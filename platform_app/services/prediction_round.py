@@ -11,7 +11,6 @@ from typing import Any, Dict, List, Optional
 
 from common.drivers.openai_driver import OpenAIDriver
 from platform_app.models import DataSrc
-from platform_app.services.data_src_url import resolve_data_src_url
 from platform_app.repos.experiment_repo import (
     create_run,
     get_run,
@@ -19,17 +18,17 @@ from platform_app.repos.experiment_repo import (
     update_run_params,
     update_run_evaluation,
 )
-from platform_core.experiment.runner import ExperimentConfig
+from platform_app.services.data_src_url import resolve_data_src_url
 from platform_app.services.experiment_runner import get_runner
 from platform_app.services.worldcup_data_versioning import (
     fetch_full_records,
     load_composed_records,
-    list_patch_batches,
     now_version_v,
     save_full_snapshot,
     save_incremental_patches,
     write_composed_records_file,
 )
+from platform_core.experiment.runner import ExperimentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -392,9 +391,12 @@ def start_prediction_round(
         if fallback:
             strategy_id = fallback
         else:
+            ids = [sid for s in list_strategies() for sid in [s.get("id")] if sid and _strategy_supports_task(sid, task)]
+            ids_preview = ", ".join(ids[:5]) if ids else "无"
+            suggestion = f"请在「训练科目」中指定支持 {task} 的策略（如 {ids_preview}）。"
             return {
                 "error": f"任务 {task} 无可用策略或训练科目未指定兼容策略。",
-                "suggestion": f"请在「训练科目」中指定支持 {task} 的策略（如 lightgbm_group_winner / lightgbm_match）。",
+                "suggestion": suggestion,
             }
 
     try:

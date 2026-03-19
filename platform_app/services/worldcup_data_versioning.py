@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from platform_app.models import DataFile, DataPatch, DataPatchBatch, DataSrc, FormatType
+from platform_app.models import DataFile, DataPatch, DataPatchBatch, FormatType
 from platform_app.services.data_src_url import resolve_data_src_url
 
 logger = logging.getLogger(__name__)
@@ -24,8 +24,8 @@ def _project_root() -> Path:
 
 
 def latest_data_file_by_version(
-    data_src_id: int,
-    data_file_version: int,
+        data_src_id: int,
+        data_file_version: int,
 ) -> Optional[DataFile]:
     """data_file 最近记录：data_src_id 匹配，ct <= data_file_version，按 ct 倒序取第 1 条。"""
     return (
@@ -70,7 +70,7 @@ def _load_records_from_json_text(text: str) -> List[Dict[str, Any]]:
 
 
 def _parse_json_envelope(
-    text: str,
+        text: str,
 ) -> Tuple[List[Dict[str, Any]], Optional[Dict[str, Any]]]:
     """
     若 JSON 根为对象且含 'records'，则视为信封格式，返回 (records, envelope_meta)。
@@ -208,9 +208,9 @@ def _apply_patches(base: List[Dict[str, Any]], patch_rows: List[DataPatch]) -> N
 
 
 def load_composed_records(
-    data_src_id: int,
-    data_file_version: int,
-    patch_batch_versions: List[int],
+        data_src_id: int,
+        data_file_version: int,
+        patch_batch_versions: List[int],
 ) -> Tuple[List[Dict[str, Any]], int, int, Optional[Dict[str, Any]]]:
     """
     按版本号查询并合成数据：
@@ -268,10 +268,10 @@ def list_patch_batches() -> List[Dict[str, Any]]:
 
 
 def write_composed_records_file(
-    version_v: int,
-    records: List[Dict[str, Any]],
-    dest_path: str = "",
-    envelope_meta: Optional[Dict[str, Any]] = None,
+        version_v: int,
+        records: List[Dict[str, Any]],
+        dest_path: str = "",
+        envelope_meta: Optional[Dict[str, Any]] = None,
 ) -> str:
     """
     写入合成数据文件。完整路径为 <dest_path>-<version>.json

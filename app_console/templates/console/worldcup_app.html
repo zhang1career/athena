@@ -84,7 +84,7 @@
   }
 })();
 const API = '/api/v1/experiments';
-const WC_STRATEGY_IDS = 'lightgbm_match,elo_baseline,lightgbm_group_winner';
+const WC_STRATEGY_IDS = '{{ wc_strategy_ids|default:"lightgbm_match,elo_baseline,odds_baseline_group_winner" }}';
 
 function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function deleteExperiment(runId) {
