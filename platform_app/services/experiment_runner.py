@@ -1,5 +1,5 @@
 """Shared experiment runner factory for API and prediction round pipeline."""
-from platform_core.experiment.runner import LocalRunner, ExperimentConfig
+from platform_core.experiment.runner import LocalRunner
 
 
 def _resolve_data_loader(data_config: dict):

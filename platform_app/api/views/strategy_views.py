@@ -1,11 +1,9 @@
 """Strategy REST API per DESIGN_SPECIFICATIONS §6"""
 import logging
 
-# Load worldcup strategies so they appear in the registry
+# Load worldcup strategies (auto-imports all modules in applications.worldcup.strategies)
 try:
-    from applications.worldcup.strategies import lightgbm_match  # noqa: F401
-    from applications.worldcup.strategies import elo_baseline  # noqa: F401
-    from applications.worldcup.strategies import lightgbm_group_winner  # noqa: F401
+    import applications.worldcup.strategies  # noqa: F401
 except ImportError:
     pass
 

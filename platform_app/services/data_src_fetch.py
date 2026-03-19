@@ -7,9 +7,9 @@ from typing import Any, Dict
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from platform_app.models import DataSrc, FetchMode, FormatType, RawDataFile
-from platform_app.services.data_src_url import resolve_data_src_url, resolve_template
+from platform_app.models import DataSrc, FormatType, RawDataFile
 from platform_app.services.data_src_content_handlers import process_fetched_content
+from platform_app.services.data_src_url import resolve_data_src_url, resolve_template
 
 logger = logging.getLogger(__name__)
 

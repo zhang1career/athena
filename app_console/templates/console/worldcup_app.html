@@ -84,7 +84,7 @@
   }
 })();
 const API = '/api/v1/experiments';
-const WC_STRATEGY_IDS = 'lightgbm_match,elo_baseline,lightgbm_group_winner';
+const WC_STRATEGY_IDS = '{{ wc_strategy_ids|default:"lightgbm_match,elo_baseline,odds_baseline_group_winner" }}';
 
 function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function deleteExperiment(runId) {
@@ -201,7 +201,10 @@ function loadDataFileVersions(dataSrcId) {
         el.innerHTML = '<option value="" disabled>-- 该数据源暂无版本 --</option>';
         return;
       }
-      el.innerHTML = versions.map(function(v) { return '<option value="' + v.ct + '">ct=' + v.ct + '</option>'; }).join('');
+      el.innerHTML = versions.map(function(v) {
+        var label = (v.name && String(v.name).trim()) ? v.name : ('ct=' + v.ct);
+        return '<option value="' + v.ct + '">' + escapeHtml(label) + '</option>';
+      }).join('');
     })
     .catch(function() { el.innerHTML = '<option value="" disabled>-- 加载失败 --</option>'; });
 }

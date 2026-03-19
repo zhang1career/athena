@@ -48,10 +48,11 @@ def match_records_to_arrays(
 def group_records_to_arrays(
     records: List[dict],
     feature_cols: List[str],
-) -> tuple[np.ndarray, np.ndarray]:
-    """Convert group_winner records (dicts with features, is_winner) to X, y arrays."""
+) -> tuple[np.ndarray, np.ndarray, List[str]]:
+    """Convert group_winner records (dicts with features, is_winner) to X, y arrays and group_ids (for per-group de-water/normalize)."""
     X_rows = []
     y_list = []
+    group_list = []
     for r in records:
         if not isinstance(r, dict):
             continue
@@ -65,4 +66,5 @@ def group_records_to_arrays(
             continue
         row = [feats.get(c, 0) for c in feature_cols]
         X_rows.append(row)
-    return np.array(X_rows, dtype=float), np.array(y_list)
+        group_list.append(str(r.get("group") or ""))
+    return np.array(X_rows, dtype=float), np.array(y_list), group_list
