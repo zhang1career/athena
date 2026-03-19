@@ -65,7 +65,7 @@ athena/
 ```json
 {
   "name": "World Cup exp",
-  "strategy_id": "lightgbm_match",
+  "strategy": "lightgbm_match",
   "data_config": {
     "path": "applications/worldcup/data/sample_data.json",
     "format": "json"

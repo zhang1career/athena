@@ -1,0 +1,127 @@
+{% extends 'console/base_list.html' %}
+{% load static console_static %}
+{% block title %}训练科目{% endblock %}
+{% block page_title %}训练科目{% endblock %}
+{% block list_title %}训练科目列表{% endblock %}
+{% block list_container_id %}train-list{% endblock %}
+{% block list_header_actions %}
+<button type="button" id="btn-add" class="btn btn-primary btn-sm">+ 新建训练科目</button>
+{% endblock %}
+
+{% block content %}
+{{ block.super }}
+{% csrf_token %}
+
+<div id="modal-edit" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
+    <h3 class="text-lg font-semibold mb-4" id="modal-title">新建训练科目</h3>
+    <div class="space-y-3">
+      <label class="block text-sm font-medium text-gray-700">名称</label>
+      <input id="modal-name" type="text" class="border border-gray-300 rounded px-3 py-2 w-full" placeholder="训练科目名称" />
+      <label class="block text-sm font-medium text-gray-700">策略</label>
+      <select id="modal-strategy" class="border border-gray-300 rounded px-3 py-2 w-full">
+        <option value="">-- 请选择策略（可选） --</option>
+      </select>
+      <label class="block text-sm font-medium text-gray-700">描述</label>
+      <textarea id="modal-description" rows="4" class="border border-gray-300 rounded px-3 py-2 w-full" placeholder="可选描述"></textarea>
+    </div>
+    <div class="mt-6 flex justify-end gap-2">
+      <button type="button" id="modal-cancel" class="btn btn-outline">取消</button>
+      <button type="button" id="modal-save" class="btn btn-primary">保存</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static_ver 'console/js/api.js' %}"></script>
+<script src="{% static_ver 'console/js/list-actions.js' %}"></script>
+<script src="{% static_ver 'console/js/list-page.js' %}"></script>
+<script src="{% static_ver 'console/js/main.js' %}"></script>
+<script>
+(function() {
+  var API = '/api/v1/trains';
+  var esc = function(s) { return window.ConsoleApi && window.ConsoleApi.escapeHtml ? window.ConsoleApi.escapeHtml(s) : (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')); };
+  window.editTrain = function(id) {
+    window.ConsoleApi.apiGet(API + '/' + id).then(function(d) {
+      openModal(id, d.name || '', d.strategy || '', d.description || '');
+    }).catch(function(e) { alert(e.message || '加载失败'); });
+  };
+  window.doDeleteTrain = function(id) {
+    if (!confirm('确认删除该训练科目？')) return;
+    window.ConsoleApi.apiDelete(API + '/' + id).then(function() {
+      if (typeof showToast === 'function') showToast('已删除', 'success');
+      ConsoleListPage.refresh();
+    }).catch(function(e) { alert(e.message || '删除失败'); });
+  };
+  ConsoleListPage.run({
+    apiUrl: API,
+    containerId: 'train-list',
+    listResponseKey: 'trains',
+    queryString: '',
+    emptyMessage: '暂无训练科目',
+    emptyHint: '点击「新建训练科目」添加',
+    columns: [
+      { key: 'id', label: 'ID', type: 'id', detailUrlTemplate: function(r) { return '/console/trains/' + r.id + '/'; } },
+      { key: 'name', label: '名称', type: 'text' },
+      { key: 'strategy', label: '策略', type: 'text' },
+      { key: 'description', label: '描述', type: 'truncate', truncateLen: 60 },
+      { key: 'ct', label: '创建时间', type: 'text' },
+    ],
+    actions: {
+      onEdit: 'editTrain',
+      onDelete: 'doDeleteTrain',
+    },
+  });
+  function openModal(id, name, strategy, description) {
+    var modal = document.getElementById('modal-edit');
+    var title = document.getElementById('modal-title');
+    document.getElementById('modal-name').value = name || '';
+    var sel = document.getElementById('modal-strategy');
+    if (sel) sel.value = strategy || '';
+    document.getElementById('modal-description').value = description || '';
+    modal.dataset.editId = id !== undefined && id > 0 ? String(id) : '';
+    title.textContent = modal.dataset.editId ? '编辑训练科目' : '新建训练科目';
+    modal.classList.remove('hidden');
+    document.getElementById('modal-name').focus();
+  }
+  function closeModal() { document.getElementById('modal-edit').classList.add('hidden'); }
+  function loadStrategiesForModal() {
+    var sel = document.getElementById('modal-strategy');
+    if (!sel) return;
+    fetch('/api/v1/strategies', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).then(function(j) {
+      if (j.errorCode !== 0) return;
+      var list = (j.data && j.data.data) || [];
+      var opts = '<option value="">-- 请选择策略（可选） --</option>' + list.map(function(s) {
+        return '<option value="' + (s.id || '').replace(/"/g, '&quot;') + '">' + (s.name || s.id || '').replace(/</g, '&lt;') + '</option>';
+      }).join('');
+      sel.innerHTML = opts;
+    }).catch(function() {});
+  }
+  loadStrategiesForModal();
+  function doSave() {
+    var modal = document.getElementById('modal-edit');
+    var editId = modal.dataset.editId;
+    var name = document.getElementById('modal-name').value.trim();
+    var strategy = (document.getElementById('modal-strategy') && document.getElementById('modal-strategy').value) || '';
+    var description = (document.getElementById('modal-description') && document.getElementById('modal-description').value) || '';
+    if (!name) { alert('请输入名称'); return; }
+    var isEdit = editId && editId !== '0';
+    var url = isEdit ? API + '/' + editId : API;
+    var payload = { name: name, strategy: strategy, description: description };
+    var req = isEdit ? window.ConsoleApi.apiPut(url, payload) : window.ConsoleApi.apiPost(url, payload);
+    req.then(function() {
+      if (typeof showToast === 'function') showToast(isEdit ? '已更新' : '已创建', 'success');
+      closeModal();
+      ConsoleListPage.refresh();
+    }).catch(function(e) { alert(e.message || '保存失败'); });
+  }
+  document.getElementById('btn-add').onclick = function() { openModal(null, '', '', ''); };
+  document.getElementById('modal-cancel').onclick = closeModal;
+  document.getElementById('modal-save').onclick = doSave;
+  document.getElementById('modal-edit').onclick = function(e) { if (e.target === this) closeModal(); };
+  var match = /[?&]edit=(\d+)/.exec(window.location.search);
+  if (match) { editTrain(parseInt(match[1], 10)); history.replaceState(null, '', window.location.pathname); }
+})();
+</script>
+{% endblock %}

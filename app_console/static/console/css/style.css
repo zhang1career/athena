@@ -30,3 +30,5 @@ body { background-color: #dcf5e0; }
 .data-table th, .data-table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
 .data-table th { font-weight: 600; background: #f9fafb; }
 .empty-state { padding: 2rem; text-center; color: #6b7280; }
+
+/* 主题相关样式已移至 theme.css（公用），由 base 引入 */

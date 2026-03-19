@@ -1,20 +1,16 @@
-{% extends 'console/base.html' %}
+{% extends 'console/base_list.html' %}
 {% load static console_static %}
 {% block title %}数据源管理{% endblock %}
 {% block page_title %}数据源管理{% endblock %}
+{% block list_title %}数据源列表{% endblock %}
+{% block list_container_id %}data-src-list{% endblock %}
+{% block list_header_actions %}
+<button type="button" id="btn-add" class="btn btn-primary btn-sm">+ 新增数据源</button>
+{% endblock %}
+
 {% block content %}
+{{ block.super }}
 {% csrf_token %}
-<div class="card">
-  <div class="card-header flex justify-between items-center">
-    <h2 class="text-lg font-semibold">数据源列表</h2>
-    <button type="button" id="btn-add" class="btn btn-primary btn-sm">+ 新增数据源</button>
-  </div>
-  <div class="card-body p-0">
-    <div id="data-src-list">
-      <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
-    </div>
-  </div>
-</div>
 
 <div id="modal-edit" class="fixed inset-0 bg-black/50 hidden z-50 flex items-center justify-center">
   <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 p-6">
@@ -56,168 +52,110 @@
   </div>
 </div>
 {% endblock %}
+
 {% block extra_js %}
+<script src="{% static_ver 'console/js/api.js' %}"></script>
 <script src="{% static_ver 'console/js/list-actions.js' %}"></script>
+<script src="{% static_ver 'console/js/list-page.js' %}"></script>
+<script src="{% static_ver 'console/js/main.js' %}"></script>
 <script>
 (function() {
-  if (typeof listIdCell === 'undefined') {
-    window.listIdCell = function(id, detailUrl) {
-      var display = (id != null && id !== '') ? String(id) : '-';
-      var escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      var escapedUrl = String(detailUrl || '').replace(/"/g, '&quot;');
-      return '<td class="font-mono text-gray-500"><a href="' + escapedUrl + '" class="text-blue-600 hover:underline cursor-pointer">' + escaped + '</a></td>';
-    };
+  var API = '/api/v1/data-srcs';
+  var esc = function(s) { return window.ConsoleApi.escapeHtml(s); };
+  function truncateCell(val, len) {
+    var raw = val != null ? (typeof val === 'object' ? JSON.stringify(val) : String(val)) : '';
+    var display = raw.length > len ? raw.slice(0, len) + '...' : raw;
+    return '<td class="text-xs" title="' + esc(raw) + '">' + esc(display || '-') + '</td>';
   }
-  if (typeof listPlainCell === 'undefined') {
-    window.listPlainCell = function(text) {
-      var display = (text != null && String(text).trim() !== '') ? String(text).trim() : '-';
-      var escaped = String(display).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      return '<td class="font-medium">' + escaped + '</td>';
-    };
-  }
-})();
-function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-const API = '/api/v1/data-srcs';
-
-function editDataSrc(id) {
-  fetch(API + '/' + id, { credentials: 'same-origin' })
-    .then(r => r.json())
-    .then(j => {
-      if (j.errorCode !== 0) { alert(j.message || '加载失败'); return; }
-      const d = j.data || {};
-      const paramsStr = (d.url_params && typeof d.url_params === 'object') ? JSON.stringify(d.url_params, null, 2) : '';
+  window.editDataSrc = function(id) {
+    window.ConsoleApi.apiGet(API + '/' + id).then(function(d) {
+      var paramsStr = (d.url_params && typeof d.url_params === 'object') ? JSON.stringify(d.url_params, null, 2) : '';
       openModal(id, d.name || '', d.src_url || '', paramsStr, d.raw_name || '', d.raw_path || '', d.cleaned_name || '', d.cleaned_path || '', d.clean_script || '', d.fetch_mode, d.format_type);
-    })
-    .catch(e => alert('加载失败: ' + e.message));
-}
-
-function loadList() {
-  const el = document.getElementById('data-src-list');
-  fetch(API, { credentials: 'same-origin' })
-    .then(r => r.json())
-    .then(j => {
-      if (j.errorCode !== 0) { el.innerHTML = '<p class="p-4 text-red-500">' + (j.message || '加载失败') + '</p>'; return; }
-      const items = (j.data && j.data.data_srcs) || [];
-      if (items.length > 0) {
-        let h = '<table class="data-table"><thead><tr><th>ID</th><th>名称</th><th>src_url</th><th>url_params</th><th>raw_path</th><th>ct</th><th>ut</th><th>操作</th></tr></thead><tbody>';
-        items.forEach(x => {
-          const url = escapeHtml(x.src_url).slice(0, 60) + (x.src_url && x.src_url.length > 60 ? '...' : '');
-          const paramsStr = (x.url_params && typeof x.url_params === 'object') ? JSON.stringify(x.url_params) : '';
-          const paramsDisplay = escapeHtml(paramsStr).slice(0, 30) + (paramsStr.length > 30 ? '...' : '');
-          const rawPath = escapeHtml(x.raw_path || '').slice(0, 40) + ((x.raw_path || '').length > 40 ? '...' : '');
-          const detailUrl = '/console/data-srcs/' + x.id + '/';
-          const hasName = x.name && x.name.trim();
-          const nameCell = hasName ? (window.listPlainCell || listPlainCell)(x.name.trim()) : '<td class="font-medium"></td>';
-          h += `<tr>
-            ${(window.listIdCell || listIdCell)(x.id, detailUrl)}
-            ${nameCell}
-            <td class="text-xs" title="${escapeHtml(x.src_url)}">${url}</td>
-            <td class="text-xs" title="${escapeHtml(paramsStr)}">${paramsDisplay || '-'}</td>
-            <td class="text-xs" title="${escapeHtml(x.raw_path || '')}">${rawPath || '-'}</td>
-            <td>${escapeHtml(x.ct)}</td>
-            <td>${escapeHtml(x.ut)}</td>
-            ${listActions({ id: x.id, onEdit: 'editDataSrc', onDelete: 'doDelete', extra: [{ label: '原始数据', href: '/console/raw-data/?data_src_id=' + x.id }] })}
-          </tr>`;
-        });
-        h += '</tbody></table>';
-        el.innerHTML = h;
-      } else {
-        el.innerHTML = '<div class="empty-state p-8"><p>暂无数据源</p><p class="text-sm mt-2">点击「新增数据源」添加</p></div>';
-      }
-    })
-    .catch(e => {
-      el.innerHTML = '<p class="p-4 text-red-500">加载失败: ' + escapeHtml(e.message) + '</p>';
-    })
-    .then(function() {
-      var match = /[?&]edit=(\d+)/.exec(window.location.search);
-      if (match) { editDataSrc(parseInt(match[1], 10)); history.replaceState(null, '', window.location.pathname); }
-    });
-}
-
-function openModal(id, name, url, urlParamsStr, rawName, rawPath, cleanedName, cleanedPath, cleanScript, fetchMode, formatType) {
-  const modal = document.getElementById('modal-edit');
-  const title = document.getElementById('modal-title');
-  document.getElementById('modal-name').value = name || '';
-  document.getElementById('modal-src-url').value = url || '';
-  document.getElementById('modal-url-params').value = urlParamsStr || '';
-  document.getElementById('modal-raw-name').value = rawName || '';
-  document.getElementById('modal-raw-path').value = rawPath || '';
-  document.getElementById('modal-cleaned-name').value = cleanedName || '';
-  document.getElementById('modal-cleaned-path').value = cleanedPath || '';
-  document.getElementById('modal-clean-script').value = cleanScript || '';
-  var modeEl = document.getElementById('modal-fetch-mode');
-  if (modeEl) modeEl.value = fetchMode === 1 ? '1' : '0';
-  var fmtEl = document.getElementById('modal-format-type');
-  if (fmtEl) fmtEl.value = formatType === 1 || formatType === 3 || formatType === 4 ? String(formatType) : '2';
-  modal.dataset.editId = id !== undefined && id > 0 ? String(id) : '';
-  title.textContent = modal.dataset.editId ? '编辑数据源' : '新增数据源';
-  modal.classList.remove('hidden');
-  document.getElementById('modal-name').focus();
-}
-
-function closeModal() {
-  document.getElementById('modal-edit').classList.add('hidden');
-}
-
-function doSave() {
-  const modal = document.getElementById('modal-edit');
-  const editId = modal.dataset.editId;
-  const name = document.getElementById('modal-name').value.trim();
-  const srcUrl = document.getElementById('modal-src-url').value.trim();
-  let urlParams = [];
-  try {
-    const raw = document.getElementById('modal-url-params').value.trim();
-    if (raw) {
-      urlParams = JSON.parse(raw);
-      if (!Array.isArray(urlParams)) { alert('url_params 必须是 JSON 数组'); return; }
-    }
-  } catch (e) { alert('url_params 必须是合法 JSON 数组'); return; }
-  const rawName = document.getElementById('modal-raw-name').value.trim();
-  const rawPath = document.getElementById('modal-raw-path').value.trim();
-  const cleanedName = (document.getElementById('modal-cleaned-name') && document.getElementById('modal-cleaned-name').value) || '';
-  const cleanedPath = (document.getElementById('modal-cleaned-path') && document.getElementById('modal-cleaned-path').value) || '';
-  const cleanScript = (document.getElementById('modal-clean-script') && document.getElementById('modal-clean-script').value) || '';
-  const fetchMode = parseInt((document.getElementById('modal-fetch-mode') && document.getElementById('modal-fetch-mode').value) || '0', 10);
-  const formatType = parseInt((document.getElementById('modal-format-type') && document.getElementById('modal-format-type').value) || '2', 10);
-  if (!srcUrl) { alert('请输入数据源地址'); return; }
-  const isEdit = editId && editId !== '0';
-  const url = isEdit ? API + '/' + editId : API;
-  const method = isEdit ? 'PUT' : 'POST';
-  const payload = { name: name, src_url: srcUrl, url_params: urlParams, raw_name: rawName, raw_path: rawPath, cleaned_name: cleanedName, cleaned_path: cleanedPath, clean_script: cleanScript, fetch_mode: fetchMode, format_type: formatType };
-  const body = JSON.stringify(payload);
-  fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
-    body,
-    credentials: 'same-origin'
-  }).then(r => r.json()).then(j => {
-    if (j.errorCode === 0) {
+    }).catch(function(e) { alert(e.message || '加载失败'); });
+  };
+  window.doDelete = function(id) {
+    if (!confirm('确认删除该数据源？')) return;
+    window.ConsoleApi.apiDelete(API + '/' + id).then(function() {
+      if (typeof showToast === 'function') showToast('已删除', 'success');
+      ConsoleListPage.refresh();
+    }).catch(function(e) { alert(e.message || '删除失败'); });
+  };
+  ConsoleListPage.run({
+    apiUrl: API,
+    containerId: 'data-src-list',
+    listResponseKey: 'data_srcs',
+    emptyMessage: '暂无数据源',
+    emptyHint: '点击「新增数据源」添加',
+    columns: [
+      { key: 'id', label: 'ID', type: 'id', detailUrlTemplate: function(r) { return '/console/data-srcs/' + r.id + '/'; } },
+      { key: 'name', label: '名称', type: 'text' },
+      { key: 'src_url', label: 'src_url', customRender: function(r) { return truncateCell(r.src_url, 60); } },
+      { key: 'url_params', label: 'url_params', customRender: function(r) { return truncateCell(r.url_params && typeof r.url_params === 'object' ? JSON.stringify(r.url_params) : r.url_params, 30); } },
+      { key: 'raw_path', label: 'raw_path', customRender: function(r) { return truncateCell(r.raw_path, 40); } },
+      { key: 'ct', label: 'ct', type: 'text' },
+      { key: 'ut', label: 'ut', type: 'text' },
+    ],
+    actions: {
+      onEdit: 'editDataSrc',
+      onDelete: 'doDelete',
+      extra: [{ label: '原始数据', hrefTemplate: function(r) { return '/console/raw-data/?data_src_id=' + r.id; } }],
+    },
+  });
+  function openModal(id, name, url, urlParamsStr, rawName, rawPath, cleanedName, cleanedPath, cleanScript, fetchMode, formatType) {
+    var modal = document.getElementById('modal-edit');
+    var title = document.getElementById('modal-title');
+    document.getElementById('modal-name').value = name || '';
+    document.getElementById('modal-src-url').value = url || '';
+    document.getElementById('modal-url-params').value = urlParamsStr || '';
+    document.getElementById('modal-raw-name').value = rawName || '';
+    document.getElementById('modal-raw-path').value = rawPath || '';
+    document.getElementById('modal-cleaned-name').value = cleanedName || '';
+    document.getElementById('modal-cleaned-path').value = cleanedPath || '';
+    document.getElementById('modal-clean-script').value = cleanScript || '';
+    var modeEl = document.getElementById('modal-fetch-mode');
+    if (modeEl) modeEl.value = fetchMode === 1 ? '1' : '0';
+    var fmtEl = document.getElementById('modal-format-type');
+    if (fmtEl) fmtEl.value = formatType === 1 || formatType === 3 || formatType === 4 ? String(formatType) : '2';
+    modal.dataset.editId = id !== undefined && id > 0 ? String(id) : '';
+    title.textContent = modal.dataset.editId ? '编辑数据源' : '新增数据源';
+    modal.classList.remove('hidden');
+    document.getElementById('modal-name').focus();
+  }
+  function closeModal() { document.getElementById('modal-edit').classList.add('hidden'); }
+  function doSave() {
+    var modal = document.getElementById('modal-edit');
+    var editId = modal.dataset.editId;
+    var name = document.getElementById('modal-name').value.trim();
+    var srcUrl = document.getElementById('modal-src-url').value.trim();
+    var urlParams = [];
+    try {
+      var raw = document.getElementById('modal-url-params').value.trim();
+      if (raw) { urlParams = JSON.parse(raw); if (!Array.isArray(urlParams)) { alert('url_params 必须是 JSON 数组'); return; } }
+    } catch (e) { alert('url_params 必须是合法 JSON 数组'); return; }
+    var rawName = document.getElementById('modal-raw-name').value.trim();
+    var rawPath = document.getElementById('modal-raw-path').value.trim();
+    var cleanedName = (document.getElementById('modal-cleaned-name') && document.getElementById('modal-cleaned-name').value) || '';
+    var cleanedPath = (document.getElementById('modal-cleaned-path') && document.getElementById('modal-cleaned-path').value) || '';
+    var cleanScript = (document.getElementById('modal-clean-script') && document.getElementById('modal-clean-script').value) || '';
+    var fetchMode = parseInt((document.getElementById('modal-fetch-mode') && document.getElementById('modal-fetch-mode').value) || '0', 10);
+    var formatType = parseInt((document.getElementById('modal-format-type') && document.getElementById('modal-format-type').value) || '2', 10);
+    if (!srcUrl) { alert('请输入数据源地址'); return; }
+    var isEdit = editId && editId !== '0';
+    var url = isEdit ? API + '/' + editId : API;
+    var payload = { name: name, src_url: srcUrl, url_params: urlParams, raw_name: rawName, raw_path: rawPath, cleaned_name: cleanedName, cleaned_path: cleanedPath, clean_script: cleanScript, fetch_mode: fetchMode, format_type: formatType };
+    var req = isEdit ? window.ConsoleApi.apiPut(url, payload) : window.ConsoleApi.apiPost(url, payload);
+    req.then(function() {
       if (typeof showToast === 'function') showToast(isEdit ? '已更新' : '已创建', 'success');
       closeModal();
-      loadList();
-    } else alert(j.message || '保存失败');
-  }).catch(e => alert('请求失败: ' + e.message));
-}
-
-function doDelete(id) {
-  if (!confirm('确认删除该数据源？')) return;
-  fetch(API + '/' + id, {
-    method: 'DELETE',
-    headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
-    credentials: 'same-origin'
-  }).then(r => r.json()).then(j => {
-    if (j.errorCode === 0) {
-      if (typeof showToast === 'function') showToast('已删除', 'success');
-      loadList();
-    } else alert(j.message || '删除失败');
-  }).catch(e => alert('删除失败: ' + e.message));
-}
-
-document.getElementById('btn-add').onclick = () => openModal(null, '', '', '', '', '', '', '', '', 0, 2);
-document.getElementById('modal-cancel').onclick = closeModal;
-document.getElementById('modal-save').onclick = doSave;
-document.getElementById('modal-edit').onclick = function(e) { if (e.target === this) closeModal(); };
-
-loadList();
+      ConsoleListPage.refresh();
+    }).catch(function(e) { alert(e.message || '保存失败'); });
+  }
+  document.getElementById('btn-add').onclick = function() { openModal(null, '', '', '', '', '', '', '', '', 0, 2); };
+  document.getElementById('modal-cancel').onclick = closeModal;
+  document.getElementById('modal-save').onclick = doSave;
+  document.getElementById('modal-edit').onclick = function(e) { if (e.target === this) closeModal(); };
+  var match = /[?&]edit=(\d+)/.exec(window.location.search);
+  if (match) { editDataSrc(parseInt(match[1], 10)); history.replaceState(null, '', window.location.pathname); }
+})();
 </script>
 {% endblock %}

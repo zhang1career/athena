@@ -10,7 +10,9 @@
  * - 操作列：使用 listActions({ id, onEdit?, onDelete?, extra? }) 输出图标
  */
 function escapeHtml(s) {
-  if (!s) return '';
+  if (s == null || s === '') return '';
+  if (typeof window !== 'undefined' && window.ConsoleApi && window.ConsoleApi.escapeHtml)
+    return window.ConsoleApi.escapeHtml(s);
   const div = document.createElement('div');
   div.textContent = s;
   return div.innerHTML;

@@ -1,6 +1,7 @@
 """
-一轮预测流程：按 data_file 版本 + data_patch_batch 版本合成数据，执行预测 → AI 建议。
+一轮预测流程：按 data_file 版本 + data_patch_batch 版本合成数据，执行预测 → 实验结果评价。
 """
+import json
 import logging
 import os
 import threading
@@ -8,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from common.drivers.openai_driver import OpenAIDriver
 from platform_app.models import DataSrc
 from platform_app.services.data_src_url import resolve_data_src_url
 from platform_app.repos.experiment_repo import (
@@ -15,6 +17,7 @@ from platform_app.repos.experiment_repo import (
     get_run,
     update_run_status,
     update_run_params,
+    update_run_evaluation,
 )
 from platform_core.experiment.runner import ExperimentConfig
 from platform_app.services.experiment_runner import get_runner
@@ -32,7 +35,6 @@ logger = logging.getLogger(__name__)
 
 WORKFLOW_TYPE = "workflow_type"
 WORKFLOW_PHASE = "workflow_phase"
-AI_SUGGESTIONS = "ai_suggestions"
 CONFIRMED_IMPROVEMENTS_AT = "confirmed_improvements_at"
 IMPROVEMENT_FOLLOW_UP_RUN_ID = "improvement_follow_up_run_id"
 APPLIED_SUGGESTIONS = "applied_suggestions"
@@ -49,7 +51,7 @@ PHASE_DONE = "done"
 
 PHASE_LABELS = {
     PHASE_RUNNING: "预测中",
-    PHASE_AI_SUGGESTIONS_PENDING: "AI建议待确认",
+    PHASE_AI_SUGGESTIONS_PENDING: "实验结果评价待确认",
     PHASE_IMPROVING: "执行改进中",
     PHASE_DONE: "已完成",
 }
@@ -61,17 +63,6 @@ def get_workflow_phase_label(phase: Optional[str]) -> str:
     return PHASE_LABELS.get(phase, phase)
 
 
-# 命题(task) -> 默认策略
-TASK_DEFAULT_STRATEGY = {
-    "group_winner": "lightgbm_group_winner",
-    "match_1x2": "lightgbm_match",
-}
-
-
-def _strategy_id_for_task(task: str) -> str:
-    return TASK_DEFAULT_STRATEGY.get(task, "lightgbm_match")
-
-
 def _strategy_supports_task(strategy_id: str, task: str) -> bool:
     from platform_core.strategy.registry import get_strategy_schema
     schema = get_strategy_schema(strategy_id)
@@ -79,18 +70,6 @@ def _strategy_supports_task(strategy_id: str, task: str) -> bool:
         return False
     supported = getattr(schema, "supported_tasks", None) or []
     return task in supported
-
-
-def _get_openai_client():
-    base_url = os.environ.get("AIGC_API_URL") or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1"
-    api_key = os.environ.get("AIGC_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
-    if not api_key:
-        return None
-    try:
-        from openai import OpenAI
-        return OpenAI(base_url=base_url, api_key=api_key)
-    except Exception:
-        return None
 
 
 def check_prerequisites_worldcup(data_src_id: int = 0) -> Dict[str, Any]:
@@ -126,8 +105,8 @@ def check_prerequisites_worldcup(data_src_id: int = 0) -> Dict[str, Any]:
         "worldcup_config_exists": worldcup_config_path.exists(),
         "data_sources_config_exists": data_sources_path.exists(),
     }
-    client = _get_openai_client()
-    if not client:
+    driver = OpenAIDriver()
+    if not driver.is_available or not driver.client:
         if not strategies:
             return {"ok": False, "error": "未注册任何策略。", "suggestion": "请加载世界杯策略并配置 AIGC_API_KEY。"}
         if not sources and not (data_src_id and selected_url):
@@ -144,7 +123,7 @@ def check_prerequisites_worldcup(data_src_id: int = 0) -> Dict[str, Any]:
         "若缺少必要条件，请说明并给出建议；若可以启动，请回复：可以启动。"
     ) % (str(env_summary),)
     try:
-        resp = client.chat.completions.create(
+        resp = driver.client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "只输出「可以启动」或说明缺少什么并给建议。"},
@@ -164,49 +143,164 @@ def check_prerequisites_worldcup(data_src_id: int = 0) -> Dict[str, Any]:
         return {"ok": False, "error": "AI 检查出错。", "suggestion": "检查 AIGC_API_KEY 后重试。"}
 
 
+def _extract_chat_content(resp) -> Optional[str]:
+    """从 OpenAI 兼容的 chat completion 响应中提取首条 content，兼容不同实现。"""
+    choices = getattr(resp, "choices", None)
+    if not choices or not len(choices):
+        return None
+    msg = getattr(choices[0], "message", None)
+    if msg is None:
+        return None
+    content = getattr(msg, "content", None)
+    if content is not None and isinstance(content, str):
+        return content
+    if hasattr(msg, "text"):
+        return getattr(msg, "text", None)
+    if isinstance(msg, dict):
+        return msg.get("content") or msg.get("text")
+    return None
+
+
 def _get_improvement_suggestions(run_id: int) -> str:
     run = get_run(run_id)
     if not run:
         return ""
-    base_url = os.environ.get("AIGC_API_URL") or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1"
-    api_key = os.environ.get("AIGC_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
-    if not api_key:
+    driver = OpenAIDriver()
+    if not driver.is_available or not driver.client:
         return "（未配置 AIGC_API_KEY）"
-    try:
-        from openai import OpenAI
-        client = OpenAI(base_url=base_url, api_key=api_key)
-    except Exception as e:
-        return f"（AI 初始化失败: {e}）"
+    base_url = driver.base_url
     model = os.environ.get("AIGC_GPT_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
-    prompt = (
-        "根据以下实验结果，用 2～4 条中文给出改进建议。\n\n"
-        "指标：%s\n参数：%s\n"
-    ) % (str(run.metrics or {}), str(run.params or {}))
+
+    # Build rich context so the AI can give concrete suggestions（字段均取自 plat_exp_run 表）
+    params = run.params or {}
+    metrics = run.metrics or {}
+    data_config = run.data_config or {}
+    strategy_schema_desc = ""
+    strategy_desc = ""
     try:
-        resp = client.chat.completions.create(
+        from platform_core.strategy.registry import get_strategy_schema, get_strategy_description
+        schema = get_strategy_schema(run.strategy or "")
+        if schema and schema.params_schema:
+            strategy_schema_desc = (
+                "当前策略可调参数（可据此建议调参）：%s" % (str(schema.params_schema),)
+            )
+        strategy_desc = get_strategy_description(run.strategy or "") or ""
+    except Exception:
+        pass
+    strategy_display = strategy_desc if strategy_desc else (run.strategy or "（无）")
+
+    run_description = getattr(run, "description", None) or ""
+    data_q = run.data_q if isinstance(getattr(run, "data_q", None), dict) else {}
+
+    context_parts = [
+        "【实验名称】%s" % (run.name or "未命名"),
+        "【实验描述】%s" % (run_description if run_description else "（无）"),
+        "【应用场景】足球世界杯预测",
+        "【策略】%s" % strategy_display,
+        "【数据评价】%s" % json.dumps(data_q, ensure_ascii=False, indent=2),
+        "【验证/测试指标】%s" % json.dumps(metrics, ensure_ascii=False, indent=2),
+        "【本次运行参数】%s" % json.dumps(params, ensure_ascii=False, indent=2),
+        "【数据配置摘要】path=%s, format=%s" % (
+            data_config.get("path", ""),
+            data_config.get("format", ""),
+        ),
+    ]
+    if run.error_message:
+        context_parts.append("【错误信息】%s" % run.error_message)
+    if strategy_schema_desc:
+        context_parts.append(strategy_schema_desc)
+
+    prompt = (
+        "你是一位预测实验评估顾问。根据以下实验的完整上下文，用 2～4 条简短、可操作的中文实验结果评价（每条一行）。"
+        "可包括：结果解读、指标优劣、调参与数据/特征/模型方面的改进空间等。\n\n"
+        "%s"
+    ) % "\n\n".join(context_parts)
+
+    messages = [
+        {"role": "system", "content": "只输出 2～4 条简短中文实验结果评价，每条单独一行，不要编号外的多余解释。"},
+        {"role": "user", "content": prompt},
+    ]
+    max_tokens_suggestions = 10_000
+    logger.info(
+        "AIGC API 请求参数 (run_id=%s): base_url=%s, model=%s, max_tokens=%s, messages_count=%s",
+        run_id, base_url, model, max_tokens_suggestions, len(messages),
+    )
+    logger.info("AIGC API 请求 body.messages (run_id=%s): %s", run_id, json.dumps(messages, ensure_ascii=False, indent=2))
+
+    try:
+        resp = driver.client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": "只输出简短中文建议，每条一行。"},
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=500,
+            messages=messages,
+            max_tokens=max_tokens_suggestions,
         )
-        return (resp.choices[0].message.content or "").strip()
+        content = _extract_chat_content(resp)
+        text = (content or "").strip()
+        choices = getattr(resp, "choices", None) or []
+        logger.info(
+            "AIGC API 响应 (run_id=%s): choices_len=%s, extracted_content_len=%s",
+            run_id, len(choices), len(text),
+        )
+        if choices and len(choices) > 0:
+            first = choices[0]
+            msg = getattr(first, "message", None)
+            logger.info(
+                "AIGC API 响应 choices[0] (run_id=%s): finish_reason=%s, message=%s",
+                run_id,
+                getattr(first, "finish_reason", None),
+                repr(getattr(msg, "content", None))[:200] if msg else None,
+            )
+        if not text:
+            logger.warning(
+                "AI suggestions for run_id=%s: API returned empty content. choices_len=%s",
+                run_id,
+                len(choices),
+            )
+            return "（接口已调用但未返回评价内容，请检查 AIGC 模型名称与可用性后重试）"
+        return text
     except Exception as e:
         logger.exception("AI suggestions failed: %s", e)
         return f"（失败: {e}）"
 
 
+def fetch_and_save_improvement_suggestions(run_id: int) -> None:
+    """
+    对指定 run 调用 OpenAI 兼容接口获取实验结果评价，并写入 run.evaluation 与 workflow_phase。
+    实验/Research 跑成 SUCCESS 后调用此函数即可在详情页看到评价。
+    """
+    evaluation_text = _get_improvement_suggestions(run_id)
+    update_run_evaluation(run_id, evaluation_text)
+    update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_AI_SUGGESTIONS_PENDING})
+
+
 def _run_round_async(run_id: int, config: ExperimentConfig):
     try:
+        # Set artifact_dir so the runner can save the trained model
+        try:
+            from django.conf import settings
+            resource_root = getattr(settings, "RESOURCE_ROOT", None) or os.path.join(
+                Path(__file__).resolve().parent.parent.parent, "resources"
+            )
+            artifact_dir = os.path.join(resource_root, "artifacts", "runs", str(run_id))
+            os.makedirs(artifact_dir, exist_ok=True)
+            config.data_config = dict(config.data_config or {}, artifact_dir=artifact_dir)
+        except Exception as e:
+            logger.warning("Could not set artifact_dir for run %s: %s", run_id, e)
+
         runner = get_runner(config.data_config)
         result = runner.run(config)
-        update_run_status(run_id, result.status, metrics=result.metrics, error_message=result.error_message or "")
+        update_run_status(
+            run_id,
+            result.status,
+            metrics=result.metrics,
+            error_message=result.error_message or "",
+            artifacts=getattr(result, "artifacts", None),
+        )
         if result.status != "SUCCESS":
             update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_DONE})
             return
-        suggestions = _get_improvement_suggestions(run_id)
-        update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_AI_SUGGESTIONS_PENDING, AI_SUGGESTIONS: suggestions})
+        evaluation_text = _get_improvement_suggestions(run_id)
+        update_run_evaluation(run_id, evaluation_text)
+        update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_AI_SUGGESTIONS_PENDING})
     except Exception as e:
         logger.exception("Prediction round %s failed: %s", run_id, e)
         update_run_status(run_id, "FAILED", error_message=str(e))
@@ -219,6 +313,8 @@ def start_prediction_round(
     data_file_version: Optional[int] = None,
     patch_batch_cts: Optional[List[int]] = None,
     incremental_update_data: Optional[Dict[str, Any]] = None,
+    train_id: Optional[int] = None,
+    quality_use_ai: bool = False,
 ) -> Dict[str, Any]:
     """
     启动一轮预测：
@@ -226,7 +322,8 @@ def start_prediction_round(
     2) data_file_version = 传入值或当前时间
     3) patch_batch_versions = patch_batch_cts + 新 batch ct（若有），按 ct 升序
     4) 调用 load_composed_records 得到数据源
-    5) 创建实验并异步执行预测
+    5) 若提供 train_id，用 Train 的 name/description 作为实验名称与 params.description，并生成数据质量 q 写入 params.q
+    6) 创建实验并异步执行预测
     """
     if application != "worldcup":
         return {"error": f"暂不支持应用: {application}", "suggestion": ""}
@@ -276,12 +373,29 @@ def start_prediction_round(
         return {"error": "当前版本缺少可用基础数据。", "suggestion": "请先保存 data_file 快照或确认 data_file_version 正确。"}
 
     task = (envelope_meta or {}).get("task") or (envelope_meta or {}).get("data_type") or "match_1x2"
-    strategy_id = _strategy_id_for_task(task)
-    if not _strategy_supports_task(strategy_id, task):
-        return {
-            "error": f"任务 {task} 无可用策略或策略不兼容。",
-            "suggestion": f"请为 task={task} 注册并启用支持该任务的策略（如 lightgbm_group_winner）。",
-        }
+    train = None
+    if train_id:
+        try:
+            from platform_app.models import Train
+            train = Train.objects.filter(pk=train_id).first()
+        except Exception:
+            pass
+    strategy_id = (train.strategy or "").strip() if train else ""
+    if not strategy_id or not _strategy_supports_task(strategy_id, task):
+        from platform_core.strategy.registry import list_strategies
+        fallback = None
+        for s in list_strategies():
+            sid = s.get("id")
+            if sid and _strategy_supports_task(sid, task):
+                fallback = sid
+                break
+        if fallback:
+            strategy_id = fallback
+        else:
+            return {
+                "error": f"任务 {task} 无可用策略或训练科目未指定兼容策略。",
+                "suggestion": f"请在「训练科目」中指定支持 {task} 的策略（如 lightgbm_group_winner / lightgbm_match）。",
+            }
 
     try:
         ds = DataSrc.objects.get(pk=data_src_id)
@@ -294,7 +408,8 @@ def start_prediction_round(
         now, composed_records, dest_path=dest_path, envelope_meta=envelope_meta
     )
 
-    name = "世界杯预测一轮"
+    name = train.name if train else "世界杯预测一轮"
+    description = (train.description or "") if train else ""
     params = {
         WORKFLOW_TYPE: "worldcup_round",
         WORKFLOW_PHASE: PHASE_RUNNING,
@@ -306,10 +421,41 @@ def start_prediction_round(
         UPDATE_PATCH_COUNT: patch_count,
         "composed_from_snapshot_ct": snapshot_ct,
         "task": task,
+        "description": description,
     }
+    if train_id:
+        params["train_id"] = train_id
+    # 数据质量：程序为主、可选 AI；写入 run.data_q，并保留 params["q"] 兼容
+    try:
+        from platform_app.services.data_quality import build_quality_info
+        data_quality = build_quality_info(composed_records, task=task, use_ai=quality_use_ai)
+        params["q"] = data_quality
+    except Exception as e:
+        logger.warning("Build quality_info failed: %s", e)
+        data_quality = {
+            "label_type": "multiclass" if task != "group_winner" else "binary",
+            "sample_count": 0,
+            "positive_class": 0,
+            "negative_class": 0,
+            "balance": 0.0,
+            "mean": 0.0,
+            "variance": 0.0,
+            "invalid_or_missing_count": len(composed_records or []),
+            "extra": {"error": str(e)},
+        }
+        params["q"] = data_quality
+
     data_config = {"path": composed_path, "format": "json", DATA_VERSION_V: now, "task": task}
 
-    run = create_run(name=name, strategy_id=strategy_id, params=params, data_config=data_config, v=now)
+    run = create_run(
+        name=name,
+        strategy=strategy_id,
+        params=params,
+        data_config=data_config,
+        v=now,
+        data_q=data_quality,
+        description=description,
+    )
     config = ExperimentConfig(name=name, strategy_id=strategy_id, params=params, data_config=data_config)
     t = threading.Thread(target=_run_round_async, args=(run.id, config))
     t.daemon = True
@@ -318,7 +464,7 @@ def start_prediction_round(
 
 
 def _suggestions_to_list(suggestions_text: Optional[str]) -> List[str]:
-    """将 AI 建议文案按行拆成列表，过滤空行。"""
+    """将实验结果评价文案按行拆成列表，过滤空行。"""
     if not suggestions_text or not str(suggestions_text).strip():
         return []
     return [line.strip() for line in str(suggestions_text).strip().split("\n") if line.strip()]
@@ -330,7 +476,8 @@ def apply_improvements(
     supplementary: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    执行改进：记录用户勾选的建议与补充信息，启动新一轮预测（跟进实验），返回过程与结果。
+    执行改进：记录用户勾选的建议与补充信息，调用 cursor-cli 在项目内执行改进（改代码/配置），返回过程与结果。
+    使用环境变量 CURSOR_API_KEY 调用 cursor-cli（cursor-agent / agent）。
     """
     run = get_run(run_id)
     if not run:
@@ -341,61 +488,95 @@ def apply_improvements(
     if params.get(WORKFLOW_PHASE) != PHASE_AI_SUGGESTIONS_PENDING:
         return {"error": f"当前阶段不可执行改进: {params.get(WORKFLOW_PHASE)}"}
 
-    suggestions_list = _suggestions_to_list(params.get("ai_suggestions"))
+    evaluation_raw = getattr(run, "evaluation", None) or ""
+    suggestions_list = _suggestions_to_list(evaluation_raw)
     indices = list(selected_indices or [])
     applied_suggestions = [suggestions_list[i] for i in indices if 0 <= i < len(suggestions_list)]
     supp = (supplementary or "").strip()
 
     process: List[str] = []
-    process.append("已记录您选择的 %d 条建议与补充信息。" % (len(applied_suggestions) + (1 if supp else 0)))
+    process.append("已记录您选择的 %d 条评价项与补充信息。" % (len(applied_suggestions) + (1 if supp else 0)))
     update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_IMPROVING})
 
-    data_src_id = params.get(DATA_SRC_ID)
-    if not data_src_id:
-        update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_AI_SUGGESTIONS_PENDING})
-        return {"error": "缺少数据源信息，无法启动跟进实验", "process": process}
+    # Build prompt for cursor-cli
+    prompt_parts = [
+        "你正在为 Athena 预测平台执行「改进」任务。请根据以下实验背景与用户选择的实验结果评价项，修改项目代码或配置（如策略参数、数据配置、特征等），使后续预测效果更好。",
+        "",
+        "【实验信息】",
+        "实验名称: %s" % (run.name or "未命名"),
+        "策略: %s" % (run.strategy or ""),
+        "任务类型: %s" % (params.get("task") or ""),
+        "指标: %s" % json.dumps(run.metrics or {}, ensure_ascii=False),
+        "当前运行参数: %s" % json.dumps(params, ensure_ascii=False),
+        "",
+        "【用户选择的实验结果评价项】",
+    ]
+    for i, s in enumerate(applied_suggestions, 1):
+        prompt_parts.append("%d. %s" % (i, s))
+    if supp:
+        prompt_parts.append("")
+        prompt_parts.append("【用户补充说明】")
+        prompt_parts.append(supp)
+    prompt_parts.append("")
+    prompt_parts.append("请在本项目仓库内直接修改代码或配置，完成后简要说明做了哪些改动。")
+    prompt_text = "\n".join(prompt_parts)
 
-    out = start_prediction_round(
-        application="worldcup",
-        data_src_id=int(data_src_id),
-        data_file_version=params.get("data_file_version"),
-        patch_batch_versions=params.get("patch_batch_versions"),
+    # Resolve workspace (athena project root)
+    try:
+        from django.conf import settings
+        workspace_path = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parent.parent.parent))
+    except Exception:
+        workspace_path = Path(__file__).resolve().parent.parent.parent
+    # Log under media so we can optionally serve it
+    try:
+        from django.conf import settings
+        media_root = Path(getattr(settings, "MEDIA_ROOT", workspace_path / "media"))
+    except Exception:
+        media_root = workspace_path / "media"
+    log_path = media_root / "artifacts" / "cursor_cli_logs" / ("run_%s.log" % run_id)
+
+    from platform_app.services.cursor_cli import run_cursor_cli
+    cursor_timeout = int(os.environ.get("CURSOR_CLI_TIMEOUT", "600"))
+    out_cli = run_cursor_cli(
+        workspace_path=workspace_path,
+        prompt=prompt_text,
+        log_path=log_path,
+        timeout=cursor_timeout,
     )
-    if out.get("error"):
-        update_run_params(run_id, **{WORKFLOW_PHASE: PHASE_AI_SUGGESTIONS_PENDING})
-        process.append("启动跟进实验失败: %s" % out["error"])
-        return {"error": out["error"], "process": process}
+    exit_code = out_cli.get("exit_code", -1)
+    log_path_str = out_cli.get("log_path")
+    process.append("已调用 cursor-cli 执行改进，退出码: %s。" % exit_code)
+    if out_cli.get("error"):
+        process.append("错误: %s" % out_cli["error"])
+    if log_path_str:
+        process.append("日志已保存: %s" % log_path_str)
 
-    new_run_id = out.get("id")
-    process.append("已创建跟进实验 #%s。" % new_run_id)
-    process.append("已启动新一轮预测，新实验运行中。")
-
-    update_run_params(
-        new_run_id,
-        **{
-            "improvement_from_run_id": run_id,
-            APPLIED_SUGGESTIONS: applied_suggestions,
-            SUPPLEMENTARY: supp,
-        },
-    )
     confirmed_at = datetime.now(timezone.utc).isoformat()
     update_run_params(
         run_id,
         **{
             WORKFLOW_PHASE: PHASE_DONE,
             CONFIRMED_IMPROVEMENTS_AT: confirmed_at,
-            IMPROVEMENT_FOLLOW_UP_RUN_ID: new_run_id,
             APPLIED_SUGGESTIONS: applied_suggestions,
             SUPPLEMENTARY: supp,
+            "cursor_cli_exit_code": exit_code,
+            "cursor_cli_log_path": log_path_str,
+            "cursor_cli_completed_at": confirmed_at,
+            "cursor_cli_error": out_cli.get("error"),
         },
     )
-    process.append("当前实验已标记为「已完成」，可前往跟进实验查看新结果。")
+    process.append("当前实验已标记为「已完成」。")
+
+    message = "已通过 cursor-cli 执行改进。退出码: %s。" % exit_code
+    if exit_code != 0 and out_cli.get("error"):
+        message += " " + out_cli["error"]
 
     return {
         "id": run_id,
         "workflow_phase": PHASE_DONE,
         "confirmed_at": confirmed_at,
-        "new_run_id": new_run_id,
         "process": process,
-        "message": "已根据您选择的建议启动新一轮预测，跟进实验 #%s。" % new_run_id,
+        "message": message,
+        "cursor_cli_exit_code": exit_code,
+        "cursor_cli_log_path": log_path_str,
     }

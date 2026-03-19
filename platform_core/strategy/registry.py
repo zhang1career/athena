@@ -4,15 +4,17 @@ from typing import Dict, List, Optional, Type
 from platform_core.strategy.base import Strategy, StrategySchema
 
 _REGISTRY: Dict[str, Type[Strategy]] = {}
+_REGISTRY_META: Dict[str, dict] = {}  # strategy_id -> { "description": str, ... }
 
 
-def register_strategy(strategy_id: str):
-    """Decorator to register a strategy class."""
+def register_strategy(strategy_id: str, description: str = ""):
+    """Decorator to register a strategy class. Optional description for UI/API."""
 
     def decorator(cls: Type[Strategy]):
         if not issubclass(cls, Strategy):
             raise TypeError(f"{cls} must be a subclass of Strategy")
         _REGISTRY[strategy_id] = cls
+        _REGISTRY_META[strategy_id] = {"description": description or ""}
         return cls
 
     return decorator
@@ -30,20 +32,28 @@ def get_strategy(strategy_id: str, params: Optional[dict] = None) -> Optional[St
 
 
 def list_strategies() -> List[dict]:
-    """List all registered strategies with schema."""
+    """List all registered strategies with schema and description (公用：策略列表)."""
     result = []
     for sid, cls in _REGISTRY.items():
         schema = cls.get_schema()
+        meta = _REGISTRY_META.get(sid) or {}
         item = {
             "id": sid,
             "name": schema.name,
             "version": schema.version,
             "params_schema": schema.params_schema,
+            "description": meta.get("description", ""),
         }
         if getattr(schema, "supported_tasks", None):
             item["supported_tasks"] = schema.supported_tasks
         result.append(item)
     return result
+
+
+def get_strategy_description(strategy_id: str) -> str:
+    """Get description for a strategy by ID (公用：策略描述)."""
+    meta = _REGISTRY_META.get(strategy_id)
+    return (meta.get("description") or "") if meta else ""
 
 
 def get_strategy_schema(strategy_id: str) -> Optional[StrategySchema]:

@@ -18,6 +18,7 @@ from platform_app.repos.experiment_repo import (
 )
 from platform_app.services.prediction_round import (
     apply_improvements,
+    fetch_and_save_improvement_suggestions,
     get_workflow_phase_label,
 )
 from platform_core.experiment.runner import ExperimentConfig
@@ -37,6 +38,8 @@ def _run_experiment_async(pk: int, config: ExperimentConfig):
             metrics=result.metrics,
             error_message=result.error_message,
         )
+        if result.status == "SUCCESS":
+            fetch_and_save_improvement_suggestions(pk)
     except Exception as e:
         logger.exception("Experiment %s failed: %s", pk, e)
         update_run_status(pk, "FAILED", error_message=str(e))
@@ -49,29 +52,29 @@ class ExperimentListCreateView(APIView):
         try:
             data = safe_request_data(request)
             name = data.get("name") or "Unnamed"
-            strategy_id = data.get("strategy_id")
-            if not strategy_id:
-                return resp_err("strategy_id required", code=RET_INVALID_PARAM)
+            strategy = data.get("strategy")
+            if not strategy:
+                return resp_err("strategy required", code=RET_INVALID_PARAM)
             params = data.get("params") or {}
             data_config = data.get("data_config") or {}
             task = data_config.get("task")
             if task:
-                schema = get_strategy_schema(strategy_id)
+                schema = get_strategy_schema(strategy)
                 if schema and getattr(schema, "supported_tasks", None) and task not in schema.supported_tasks:
                     return resp_err(
-                        f"策略 {strategy_id} 不支持任务 {task}（支持: {schema.supported_tasks}）",
+                        f"策略 {strategy} 不支持任务 {task}（支持: {schema.supported_tasks}）",
                         code=RET_INVALID_PARAM,
                     )
 
             run = create_run(
                 name=name,
-                strategy_id=strategy_id,
+                strategy=strategy,
                 params=params,
                 data_config=data_config,
             )
             config = ExperimentConfig(
                 name=name,
-                strategy_id=strategy_id,
+                strategy_id=strategy,
                 params=params,
                 data_config=data_config,
             )
@@ -90,13 +93,13 @@ class ExperimentListCreateView(APIView):
             limit = min(max(1, limit), 200)
             offset = max(0, offset)
             status = request.GET.get("status")
-            strategy_id = request.GET.get("strategy_id")
+            strategy = request.GET.get("strategy")
             strategy_ids_raw = request.GET.get("strategy_ids")
             strategy_ids = [s.strip() for s in strategy_ids_raw.split(",") if s.strip()] if strategy_ids_raw else None
 
             items, total = list_runs(
                 limit=limit, offset=offset, status=status,
-                strategy_id=strategy_id, strategy_ids=strategy_ids,
+                strategy=strategy, strategy_ids=strategy_ids,
             )
             data = []
             for r in items:
@@ -105,7 +108,7 @@ class ExperimentListCreateView(APIView):
                 data.append({
                     "id": r.id,
                     "name": r.name,
-                    "strategy_id": r.strategy_id,
+                    "strategy": r.strategy,
                     "status": r.status_label,
                     "metrics": r.metrics,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
@@ -127,17 +130,19 @@ class ExperimentDetailView(APIView):
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         params = run.params or {}
         workflow_phase = params.get("workflow_phase")
-        ai_suggestions_raw = params.get("ai_suggestions")
-        ai_suggestions_list = [
-            line.strip() for line in (str(ai_suggestions_raw or "").strip().split("\n"))
+        evaluation_raw = getattr(run, "evaluation", None) or ""
+        evaluation_list = [
+            line.strip() for line in (str(evaluation_raw or "").strip().split("\n"))
             if line.strip()
         ]
         return resp_ok({
             "id": run.id,
             "name": run.name,
-            "strategy_id": run.strategy_id,
+            "description": getattr(run, "description", "") or "",
+            "strategy": run.strategy,
             "params": run.params,
             "data_config": run.data_config,
+            "data_q": run.data_q,
             "status": run.status_label,
             "metrics": run.metrics,
             "artifacts": run.artifacts,
@@ -145,10 +150,14 @@ class ExperimentDetailView(APIView):
             "error_message": run.error_message,
             "workflow_phase": workflow_phase,
             "workflow_phase_label": get_workflow_phase_label(workflow_phase),
-            "ai_suggestions": ai_suggestions_raw,
-            "ai_suggestions_list": ai_suggestions_list,
+            "evaluation": evaluation_raw,
+            "evaluation_list": evaluation_list,
             "confirmed_improvements_at": params.get("confirmed_improvements_at"),
             "improvement_follow_up_run_id": params.get("improvement_follow_up_run_id"),
+            "cursor_cli_exit_code": params.get("cursor_cli_exit_code"),
+            "cursor_cli_log_path": params.get("cursor_cli_log_path"),
+            "cursor_cli_completed_at": params.get("cursor_cli_completed_at"),
+            "cursor_cli_error": params.get("cursor_cli_error"),
             "v": run.v,
         })
 
@@ -159,6 +168,29 @@ class ExperimentDetailView(APIView):
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         run.delete()
         return resp_ok({"id": pk, "deleted": True})
+
+
+class ExperimentRefreshSuggestionsView(APIView):
+    """POST /api/v1/experiments/{pk}/refresh-suggestions — 重新调用 AI 获取实验结果评价并写回 run.evaluation。"""
+
+    def post(self, request: Request, pk: int):
+        run = get_run(pk)
+        if not run:
+            return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
+        fetch_and_save_improvement_suggestions(pk)
+        run = get_run(pk)
+        params = run.params or {}
+        evaluation_raw = getattr(run, "evaluation", None) or ""
+        evaluation_list = [
+            line.strip() for line in (str(evaluation_raw or "").strip().split("\n"))
+            if line.strip()
+        ]
+        return resp_ok({
+            "evaluation": evaluation_raw,
+            "evaluation_list": evaluation_list,
+            "workflow_phase": params.get("workflow_phase"),
+            "workflow_phase_label": get_workflow_phase_label(params.get("workflow_phase")),
+        })
 
 
 class ExperimentCancelView(APIView):
@@ -174,7 +206,7 @@ class ExperimentCancelView(APIView):
 
 
 class ExperimentConfirmImprovementsView(APIView):
-    """POST /api/v1/experiments/{pk}/confirm-improvements — 执行改进：勾选建议+补充信息，启动跟进实验"""
+    """POST /api/v1/experiments/{pk}/confirm-improvements — 执行改进：勾选实验结果评价项+补充信息，调用 cursor-cli 在项目内执行改进"""
 
     def post(self, request: Request, pk: int):
         run = get_run(pk)

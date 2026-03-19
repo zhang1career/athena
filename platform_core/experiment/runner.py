@@ -1,8 +1,9 @@
 """Experiment runner per DESIGN_SPECIFICATIONS §2"""
 import logging
+import os
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ class ExperimentResult:
     status: str  # SUCCESS, FAILED
     metrics: Dict[str, float] = field(default_factory=dict)
     error_message: str = ""
+    artifacts: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class ExperimentRunner:
@@ -83,6 +85,21 @@ class LocalRunner(ExperimentRunner):
             # TRAIN
             strategy.fit(X_train, y_train)
 
+            # Save model artifact when artifact_dir is provided (e.g. by prediction round)
+            artifacts: List[Dict[str, Any]] = []
+            artifact_dir = (config.data_config or {}).get("artifact_dir")
+            if artifact_dir and os.path.isdir(artifact_dir):
+                try:
+                    model = getattr(strategy, "_model", None)
+                    if model is not None:
+                        import joblib
+                        path = os.path.join(artifact_dir, "model.pkl")
+                        joblib.dump(model, path)
+                        artifacts.append({"type": "model", "path": "model.pkl"})
+                        logger.info("[LocalRunner] Saved model artifact to %s", path)
+                except Exception as e:
+                    logger.warning("[LocalRunner] Failed to save model artifact: %s", e)
+
             # VALIDATE (unified evaluation by task)
             metrics = {}
             if X_val is not None and y_val is not None:
@@ -98,7 +115,7 @@ class LocalRunner(ExperimentRunner):
 
             # BACKTEST (same as validate for now; full backtest in backtest engine)
             # FINALIZE: metrics already computed
-            return ExperimentResult(run_id=run_id, status="SUCCESS", metrics=metrics)
+            return ExperimentResult(run_id=run_id, status="SUCCESS", metrics=metrics, artifacts=artifacts)
 
         except Exception as e:
             logger.exception("[LocalRunner] Run %s failed: %s", run_id, e)

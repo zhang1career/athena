@@ -1,0 +1,55 @@
+{% extends 'console/base.html' %}
+{% load static console_static %}
+{% block title %}训练科目详情{% endblock %}
+{% block page_title %}训练科目 - {{ pk }}{% endblock %}
+{% block content %}
+{% csrf_token %}
+<div class="mb-4">
+  <a href="/console/trains/" class="text-blue-600 hover:underline">← 返回训练科目列表</a>
+</div>
+<div id="detail-content" class="space-y-4">
+  <div class="p-8 text-center"><div class="spinner"></div><p class="mt-2">加载中...</p></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{% static_ver 'console/js/main.js' %}"></script>
+<script>
+(function() {
+  var pk = {{ pk }};
+  function esc(s) { if (!s) return ''; var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  function load() {
+    fetch('/api/v1/trains/' + pk, { credentials: 'same-origin' })
+      .then(function(r) { return r.json(); })
+      .then(function(j) {
+        var el = document.getElementById('detail-content');
+        if (j.errorCode !== 0) { el.innerHTML = '<p class="text-red-500">' + esc(j.message || '加载失败') + '</p>'; return; }
+        var d = j.data;
+        el.innerHTML = '<div class="card">' +
+          '<div class="card-header flex justify-between items-center"><h3 class="font-semibold">基本信息</h3>' +
+          '<span><a href="/console/trains/?edit=' + d.id + '" class="btn btn-outline btn-sm mr-2">编辑</a>' +
+          '<button type="button" id="btn-delete" class="btn btn-danger btn-sm">删除</button></span></div>' +
+          '<div class="card-body">' +
+          '<p><strong>ID:</strong> ' + esc(d.id) + '</p>' +
+          '<p><strong>名称:</strong> ' + esc(d.name || '-') + '</p>' +
+          '<p><strong>策略:</strong> ' + esc(d.strategy || '-') + '</p>' +
+          '<p><strong>描述:</strong></p><pre class="text-sm whitespace-pre-wrap mt-1 p-3 bg-gray-50 rounded">' + esc(d.description || '') + '</pre>' +
+          '<p class="mt-2 text-xs text-gray-500">ct: ' + esc(d.ct) + ' / ut: ' + esc(d.ut) + '</p>' +
+          '</div></div>';
+        document.getElementById('btn-delete').onclick = function() {
+          if (!confirm('确认删除该训练科目？')) return;
+          fetch('/api/v1/trains/' + pk, { method: 'DELETE', headers: { 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' }, credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(res) {
+              if (res.errorCode === 0) { window.location.href = '/console/trains/'; }
+              else alert(res.message || '删除失败');
+            }).catch(function(e) { alert('删除失败: ' + e.message); });
+        };
+      })
+      .catch(function(e) {
+        document.getElementById('detail-content').innerHTML = '<p class="text-red-500">加载失败: ' + esc(e.message) + '</p>';
+      });
+  }
+  load();
+})();
+</script>
+{% endblock %}

@@ -13,7 +13,10 @@ from platform_app.repos.experiment_repo import create_run, update_run_status
 from platform_core.experiment.runner import ExperimentConfig
 from platform_app.services.experiment_runner import get_runner
 from platform_app.services.ai_recommendations import get_recommendations
-from platform_app.services.prediction_round import start_prediction_round
+from platform_app.services.prediction_round import (
+    fetch_and_save_improvement_suggestions,
+    start_prediction_round,
+)
 from platform_app.services.worldcup_data_versioning import list_patch_batches
 from platform_app.services.data_file_service import list_data_file_versions
 
@@ -22,29 +25,29 @@ logger = logging.getLogger(__name__)
 
 class ResearchProposeView(APIView):
     """
-    Accept AI proposal: strategy_id, params override, combiner_config.
+    Accept AI proposal: strategy, params override, combiner_config.
     Creates and runs experiment, returns run_id.
     """
 
     def post(self, request: Request):
         try:
             data = safe_request_data(request)
-            strategy_id = data.get("strategy_id")
-            if not strategy_id:
-                return resp_err("strategy_id required", code=RET_INVALID_PARAM)
+            strategy = data.get("strategy")
+            if not strategy:
+                return resp_err("strategy required", code=RET_INVALID_PARAM)
             params = data.get("params") or {}
             data_config = data.get("data_config") or {}
-            name = data.get("name") or f"AI propose: {strategy_id}"
+            name = data.get("name") or f"AI propose: {strategy}"
 
             run = create_run(
                 name=name,
-                strategy_id=strategy_id,
+                strategy=strategy,
                 params=params,
                 data_config=data_config,
             )
             config = ExperimentConfig(
                 name=name,
-                strategy_id=strategy_id,
+                strategy_id=strategy,
                 params=params,
                 data_config=data_config,
             )
@@ -59,6 +62,8 @@ class ResearchProposeView(APIView):
                         metrics=result.metrics,
                         error_message=result.error_message,
                     )
+                    if result.status == "SUCCESS":
+                        fetch_and_save_improvement_suggestions(run.id)
                 except Exception as e:
                     logger.exception("Research propose run %s failed: %s", run.id, e)
                     update_run_status(run.id, "FAILED", error_message=str(e))
@@ -170,12 +175,21 @@ class StartPredictionRoundView(APIView):
                 patch_batch_cts = []
             patch_batch_cts = [int(x) for x in patch_batch_cts if x is not None]
             incremental_update_data = data.get("incremental_update_data") or {}
+            train_id = data.get("train_id")
+            if train_id is not None:
+                try:
+                    train_id = int(train_id)
+                except (ValueError, TypeError):
+                    train_id = None
+            quality_use_ai = bool(data.get("quality_use_ai"))
             out = start_prediction_round(
                 application=application,
                 data_src_id=data_src_id,
                 data_file_version=data_file_version,
                 patch_batch_cts=patch_batch_cts,
                 incremental_update_data=incremental_update_data,
+                train_id=train_id,
+                quality_use_ai=quality_use_ai,
             )
             return resp_ok(out)
         except Exception as e:

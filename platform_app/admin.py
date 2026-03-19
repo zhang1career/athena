@@ -4,7 +4,7 @@ from .models import ExperimentRun, ExperimentMetric
 
 @admin.register(ExperimentRun)
 class ExperimentRunAdmin(admin.ModelAdmin):
-    list_display = ("id", "name", "strategy_id", "v", "get_status_display", "created_at")
+    list_display = ("id", "name", "strategy", "v", "get_status_display", "created_at")
     list_filter = ("status",)
     search_fields = ("name",)
 
