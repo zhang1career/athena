@@ -267,6 +267,7 @@ class Train(models.Model):
     """训练科目：一轮预测时可选，用于实验名称、描述、策略及数据质量关联。"""
 
     name = models.CharField(max_length=255)
+    code = models.CharField(max_length=128, blank=True, default="", help_text="训练科目编码，用于模型 artifact 保存路径 artifacts/<code>.pkl")
     description = models.TextField(blank=True)
     strategy = models.CharField(max_length=128, blank=True, default="")  # strategy_id from @register_strategy
     ct = models.PositiveBigIntegerField(default=0, db_column="ct")

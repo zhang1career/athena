@@ -66,7 +66,7 @@ class LocalRunner(ExperimentRunner):
             X_train, y_train = None, None
             X_val, y_val = None, None
             X_test, y_test = None, None
-            group_ids_val = None
+            group_ids_train, group_ids_val = None, None
             if self.data_loader_factory:
                 data = self.data_loader_factory(config.data_config)
                 if len(data) >= 2:
@@ -76,7 +76,7 @@ class LocalRunner(ExperimentRunner):
                 if len(data) >= 6:
                     X_test, y_test = data[4], data[5]
                 if len(data) >= 9:
-                    group_ids_val = data[7]
+                    group_ids_train, group_ids_val = data[6], data[7]
 
             if X_train is None or y_train is None:
                 return ExperimentResult(
@@ -85,23 +85,32 @@ class LocalRunner(ExperimentRunner):
                     error_message="No training data available",
                 )
 
-            # TRAIN
-            strategy.fit(X_train, y_train)
+            # TRAIN (fit kwargs: group_ids for group_winner task)
+            fit_kwargs = {}
+            if group_ids_train is not None:
+                fit_kwargs["group_ids"] = group_ids_train
+            strategy.fit(X_train, y_train, **fit_kwargs)
 
-            # Save model artifact when artifact_dir is provided (e.g. by prediction round)
+            # Save training artifact when artifact_dir is provided (e.g. by prediction round).
+            # Artifact = model (LightGBM etc.) or correlation params (odds_baseline θ).
             artifacts: List[Dict[str, Any]] = []
             artifact_dir = (config.data_config or {}).get("artifact_dir")
+            artifact_filename = (config.data_config or {}).get("artifact_filename") or "model.pkl"
             if artifact_dir and os.path.isdir(artifact_dir):
                 try:
-                    model = getattr(strategy, "_model", None)
-                    if model is not None:
+                    artifact_obj = (
+                        strategy.get_artifact()
+                        if hasattr(strategy, "get_artifact")
+                        else getattr(strategy, "_model", None)
+                    )
+                    if artifact_obj is not None:
                         import joblib
-                        path = os.path.join(artifact_dir, "model.pkl")
-                        joblib.dump(model, path)
-                        artifacts.append({"type": "model", "path": "model.pkl"})
-                        logger.info("[LocalRunner] Saved model artifact to %s", path)
+                        path = os.path.join(artifact_dir, artifact_filename)
+                        joblib.dump(artifact_obj, path)
+                        artifacts.append({"type": "artifact", "path": artifact_filename})
+                        logger.info("[LocalRunner] Saved artifact to %s", path)
                 except Exception as e:
-                    logger.warning("[LocalRunner] Failed to save model artifact: %s", e)
+                    logger.warning("[LocalRunner] Failed to save artifact: %s", e)
 
             # VALIDATE (unified evaluation by task)
             metrics = {}

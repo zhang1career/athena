@@ -42,6 +42,13 @@ class Strategy(ABC):
         """Return strategy parameters."""
         return {}
 
+    def get_artifact(self) -> Optional[Any]:
+        """
+        返回需持久化的训练结果（模型或相关度参数等），供保存到 artifacts/<model_name>.pkl。
+        子类可覆盖；默认返回 _model（兼容传统模型类策略）。
+        """
+        return getattr(self, "_model", None)
+
     def set_params(self, **params) -> None:
         """Update strategy parameters."""
         pass

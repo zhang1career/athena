@@ -16,6 +16,7 @@ def _train_to_dict(obj: Train) -> dict:
     return {
         "id": obj.id,
         "name": obj.name,
+        "code": obj.code or "",
         "description": obj.description or "",
         "strategy": obj.strategy or "",
         "ct": obj.ct,
@@ -40,9 +41,10 @@ class TrainListCreateView(APIView):
             name = (data.get("name") or "").strip()
             if not name:
                 return resp_err("name required", code=RET_INVALID_PARAM)
+            code = (data.get("code") or "").strip()
             description = (data.get("description") or "").strip()
             strategy = (data.get("strategy") or "").strip()
-            obj = Train.objects.create(name=name, description=description, strategy=strategy)
+            obj = Train.objects.create(name=name, code=code, description=description, strategy=strategy)
             return resp_ok(_train_to_dict(obj))
         except Exception as e:
             logger.exception("Create train failed: %s", e)
@@ -77,6 +79,8 @@ class TrainDetailView(APIView):
                 obj.description = (data.get("description") or "").strip()
             if "strategy" in data:
                 obj.strategy = (data.get("strategy") or "").strip()
+            if "code" in data:
+                obj.code = (data.get("code") or "").strip()
             obj.save()
             return resp_ok(_train_to_dict(obj))
         except Exception as e:
