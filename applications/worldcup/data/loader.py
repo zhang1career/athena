@@ -102,8 +102,8 @@ def _load_group_winner(
     records: List[dict],
     feature_cols: List[str],
 ) -> Tuple:
-    """Split group_winner records and return (X_train, y_train, X_val, y_val, X_test, y_test)."""
-    X, y = group_records_to_arrays(records, feature_cols)
+    """Split group_winner records and return (X_train, y_train, X_val, y_val, X_test, y_test[, group_ids_train, group_ids_val, group_ids_test])."""
+    X, y, group_ids = group_records_to_arrays(records, feature_cols)
     if len(X) == 0:
         raise ValueError("No valid group_winner records with features and is_winner")
     train_ratio = float(data_config.get("train_ratio", 0.7))
@@ -115,6 +115,7 @@ def _load_group_winner(
         X[:t1], y[:t1],
         X[t1:t2], y[t1:t2],
         X[t2:], y[t2:],
+        group_ids[:t1], group_ids[t1:t2], group_ids[t2:],
     )
 
 

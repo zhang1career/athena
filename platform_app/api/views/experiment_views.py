@@ -213,7 +213,7 @@ class ExperimentConfirmImprovementsView(APIView):
         if not run:
             return resp_err("Experiment not found", code=RET_RESOURCE_NOT_FOUND)
         try:
-            data = safe_request_data(request, of_type=dict) or {}
+            data = safe_request_data(request) or {}
             selected_indices = data.get("selected_indices")
             if selected_indices is not None and not isinstance(selected_indices, list):
                 selected_indices = [int(x) for x in str(selected_indices).split(",") if str(x).strip().isdigit()]

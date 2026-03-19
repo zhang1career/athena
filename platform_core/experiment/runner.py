@@ -66,6 +66,7 @@ class LocalRunner(ExperimentRunner):
             X_train, y_train = None, None
             X_val, y_val = None, None
             X_test, y_test = None, None
+            group_ids_val = None
             if self.data_loader_factory:
                 data = self.data_loader_factory(config.data_config)
                 if len(data) >= 2:
@@ -74,6 +75,8 @@ class LocalRunner(ExperimentRunner):
                     X_val, y_val = data[2], data[3]
                 if len(data) >= 6:
                     X_test, y_test = data[4], data[5]
+                if len(data) >= 9:
+                    group_ids_val = data[7]
 
             if X_train is None or y_train is None:
                 return ExperimentResult(
@@ -104,7 +107,8 @@ class LocalRunner(ExperimentRunner):
             metrics = {}
             if X_val is not None and y_val is not None:
                 from platform_core.backtest.engine import compute_metrics
-                result = strategy.predict(X_val)
+                predict_kwargs = {"group_ids": group_ids_val} if group_ids_val is not None else {}
+                result = strategy.predict(X_val, **predict_kwargs)
                 task = (config.data_config or {}).get("task", "auto")
                 metrics = compute_metrics(
                     y_val,

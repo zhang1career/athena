@@ -4,13 +4,38 @@ import pandas as pd
 from platform_core.strategy.base import Strategy, PredictResult, StrategySchema
 from platform_core.strategy.registry import register_strategy
 
+# 概率裁剪边界，避免 log_loss 因 0/1 极值爆炸
+PROBA_EPS = 1e-6
+PROBA_MIN = PROBA_EPS
+PROBA_MAX = 1.0 - PROBA_EPS
+
+
+def _normalize_implied_proba_by_group(
+    proba_positive: np.ndarray,
+    group_ids: list,
+) -> np.ndarray:
+    """按组去水并归一化：同组内隐含概率之和通常>1，归一化使组内和为1。"""
+    out = np.asarray(proba_positive, dtype=float).copy()
+    if not group_ids or len(group_ids) != len(out):
+        return out
+    uniq = sorted(set(g for g in group_ids if g != ""))
+    for g in uniq:
+        idx = [i for i, x in enumerate(group_ids) if x == g]
+        if not idx:
+            continue
+        s = out[idx].sum()
+        if s > 0:
+            out[idx] = out[idx] / s
+        # 若 s<=0 则保持原值，后续会 clip
+    return out
+
 
 @register_strategy(
     "odds_baseline_group_winner",
     description="赔率基线：不训练，用赔率隐含概率作为 P(小组第一)，供融合与相关度计算。",
 )
 class OddsBaselineGroupWinnerStrategy(Strategy):
-    """Use a single odds column (e.g. latest) as P(winner). No fit."""
+    """Use a single odds column (e.g. latest) as P(winner). No fit. Per-group de-water and normalize when group_ids provided."""
 
     def __init__(self, odds_column_index: int = -1, **kwargs):
         """
@@ -30,7 +55,10 @@ class OddsBaselineGroupWinnerStrategy(Strategy):
             X = X.reshape(1, -1)
         col = self.odds_column_index
         proba_positive = np.asarray(X[:, col], dtype=float).ravel()
-        proba_positive = np.clip(proba_positive, 1e-6, 1 - 1e-6)
+        group_ids = kwargs.get("group_ids")
+        if group_ids is not None:
+            proba_positive = _normalize_implied_proba_by_group(proba_positive, list(group_ids))
+        proba_positive = np.clip(proba_positive, PROBA_MIN, PROBA_MAX)
         proba = np.column_stack([1 - proba_positive, proba_positive])
         preds = (proba_positive >= 0.5).astype(int)
         # 兼容 DataFrame（与平台其他策略一致）
