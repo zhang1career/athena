@@ -277,9 +277,7 @@ def _run_round_async(run_id: int, config: ExperimentConfig):
         # Set artifact path: artifacts/<model_name>.pkl where model_name = Train.code (fallback: run_id)
         try:
             from django.conf import settings
-            resource_root = getattr(settings, "RESOURCE_ROOT", None) or os.path.join(
-                Path(__file__).resolve().parent.parent.parent, "resources"
-            )
+            resource_root = getattr(settings, "RESOURCE_ROOT", None) or str(Path(settings.BASE_DIR) / "resources")
             artifact_dir = os.path.join(resource_root, "artifacts")
             model_name = str(run_id)
             train_id = (config.params or {}).get("train_id")

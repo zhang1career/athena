@@ -61,6 +61,10 @@ class ExperimentCompareView(TemplateView):
     template_name = "console/experiment_compare.html"
 
 
+class ArtifactView(TemplateView):
+    template_name = "console/artifact_view.html"
+
+
 class WorldCupAppView(TemplateView):
     template_name = "console/worldcup_app.html"
 

@@ -25,6 +25,8 @@ from platform_app.api.views.raw_data_file_views import (
     RawDataFileCleanView,
 )
 from platform_app.api.views.train_views import TrainListCreateView, TrainDetailView
+from platform_app.api.views.worldcup_views import GroupWinnerPredictionView
+from platform_app.api.views.artifact_views import ArtifactDetailView
 
 urlpatterns = [
     path("experiments", ExperimentListCreateView.as_view()),
@@ -47,4 +49,6 @@ urlpatterns = [
     path("raw-data-files/<int:pk>/clean", RawDataFileCleanView.as_view()),
     path("trains", TrainListCreateView.as_view()),
     path("trains/<int:pk>", TrainDetailView.as_view()),
+    path("worldcup/group-winner-prediction", GroupWinnerPredictionView.as_view()),
+    path("artifacts", ArtifactDetailView.as_view()),
 ]

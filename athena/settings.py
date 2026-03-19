@@ -23,6 +23,7 @@ ALLOWED_HOSTS = ["*"] if allowed_hosts_raw == "*" else [h.strip() for h in str(a
 # Application definition
 INSTALLED_APPS = [
     "app_console",
+    "app_frontend",
     "platform_app",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -100,6 +101,11 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 # Default primary key
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Resource root for artifacts, data files (default: resources under project root)
+RESOURCE_ROOT = env("RESOURCE_ROOT", default="resources")
+if RESOURCE_ROOT and not os.path.isabs(RESOURCE_ROOT):
+    RESOURCE_ROOT = str(BASE_DIR / RESOURCE_ROOT)
 
 # Snowflake ID service (optional, for run_id generation)
 # e.g. SNOWFLAKE_ID_URL=http://localhost:18041/api/snowflake/id?bid=1002
