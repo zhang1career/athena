@@ -1,5 +1,10 @@
 """
 小组赛第一名预测服务：采用 统一度量 + 简单归一化，在服务端融合多个中间结果，预测各队获得小组第一的概率。
+
+数据来源：
+  1. 配置文件：applications/worldcup/config/groups_*.yaml（小组分组与赔率）
+  2. 赔率盘口：见 groups_*.yaml 中的 odds 字段（当前为配置内示例值，可改为外部数据源）
+  3. 相关度 θ：resources/artifacts/ 下的 pkl 文件
 """
 import logging
 from pathlib import Path
@@ -9,56 +14,19 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# 默认 artifact 路径（与 settings.RESOURCE_ROOT 一致）
+
 def _default_artifact_dir() -> Path:
+    """artifact 目录，与 settings.RESOURCE_ROOT 一致"""
     from django.conf import settings
     root = getattr(settings, "RESOURCE_ROOT", None) or str(Path(settings.BASE_DIR) / "resources")
     return Path(root) / "artifacts"
 
-# 硬编码的中间结果：8 组 × 4 队 = 32 条，每队的赔率隐含概率（小组第一）
-# 格式: (group, team, odds_implied_proba)，组内概率之和可>1，由策略按组归一化
-HARDCODED_GROUP_WINNER_ODDS: List[tuple] = [
-    # Group A
-    ("A", "Netherlands", 0.45),
-    ("A", "Ecuador", 0.25),
-    ("A", "Senegal", 0.20),
-    ("A", "Qatar", 0.10),
-    # Group B
-    ("B", "England", 0.55),
-    ("B", "USA", 0.25),
-    ("B", "Wales", 0.12),
-    ("B", "Iran", 0.08),
-    # Group C
-    ("C", "Argentina", 0.60),
-    ("C", "Poland", 0.20),
-    ("C", "Mexico", 0.15),
-    ("C", "Saudi Arabia", 0.05),
-    # Group D
-    ("D", "France", 0.58),
-    ("D", "Denmark", 0.22),
-    ("D", "Tunisia", 0.12),
-    ("D", "Australia", 0.08),
-    # Group E
-    ("E", "Spain", 0.50),
-    ("E", "Germany", 0.35),
-    ("E", "Japan", 0.10),
-    ("E", "Costa Rica", 0.05),
-    # Group F
-    ("F", "Belgium", 0.48),
-    ("F", "Croatia", 0.28),
-    ("F", "Morocco", 0.14),
-    ("F", "Canada", 0.10),
-    # Group G
-    ("G", "Brazil", 0.65),
-    ("G", "Switzerland", 0.20),
-    ("G", "Serbia", 0.10),
-    ("G", "Cameroon", 0.05),
-    # Group H
-    ("H", "Portugal", 0.52),
-    ("H", "Uruguay", 0.28),
-    ("H", "South Korea", 0.12),
-    ("H", "Ghana", 0.08),
-]
+
+def _get_artifact_filename() -> str:
+    """从 worldcup config 读取 artifact 文件名"""
+    from applications.worldcup.config import load
+    pred = (load() or {}).get("prediction") or {}
+    return pred.get("artifact_filename") or "worldcup_odds_group_winner.pkl"
 
 
 def _load_artifact(filename: str) -> Optional[Dict[str, Any]]:
@@ -90,6 +58,7 @@ def compute_group_winner_prediction(artifact_path: Optional[Path] = None) -> Dic
             "groups_summary": [ { "group", "winner", "winner_proba" }, ... ]
         }
     """
+    from applications.worldcup.config import load_groups_config
     from applications.worldcup.strategies.odds_baseline_group_winner import (
         _normalize_implied_proba_by_group,
         PROBA_MIN,
@@ -97,16 +66,20 @@ def compute_group_winner_prediction(artifact_path: Optional[Path] = None) -> Dic
     )
     from platform_core.fusion import fuse_with_unified_metric_normalization
 
-    groups = [r[0] for r in HARDCODED_GROUP_WINNER_ODDS]
-    teams = [r[1] for r in HARDCODED_GROUP_WINNER_ODDS]
-    odds_proba_raw = np.array([r[2] for r in HARDCODED_GROUP_WINNER_ODDS], dtype=float)
+    # 1. 从配置文件加载分组与赔率（applications/worldcup/config/groups_*.yaml）
+    groups, teams, odds_list, edition = load_groups_config()
+    if not groups:
+        logger.warning("No groups config loaded, returning empty result")
+        return {"records": [], "groups_summary": [], "theta": None, "intermediates": [], "fusion_method": "unified_metric_normalization", "edition": None}
+    odds_proba_raw = np.array(odds_list, dtype=float)
 
-    # 1. 构建中间结果列表（可扩展：添加 LightGBM、ELO 等）
+    # 2. 构建中间结果列表（可扩展：添加 LightGBM、ELO 等）
     # 赔率：按组归一化
     proba_odds = _normalize_implied_proba_by_group(odds_proba_raw, groups)
     proba_odds = np.clip(proba_odds, PROBA_MIN, PROBA_MAX)
 
-    artifact = _load_artifact("worldcup_odds_group_winner.pkl")
+    # 3. 从 resources/artifacts/ 加载相关度 θ
+    artifact = _load_artifact(_get_artifact_filename())
     theta_odds = None
     if artifact:
         theta_odds = artifact.get("theta") if isinstance(artifact.get("theta"), dict) else artifact
@@ -152,9 +125,10 @@ def compute_group_winner_prediction(artifact_path: Optional[Path] = None) -> Dic
             "winner_proba": round(fused_proba[wi], 4),
         })
 
-    # 4. 组装返回（兼容前端，theta 为主策略的 θ）
+    # 5. 组装返回（兼容前端，theta 为主策略的 θ）
     result: Dict[str, Any] = {
         "fusion_method": "unified_metric_normalization",
+        "edition": edition,
         "records": records,
         "groups_summary": groups_summary,
     }

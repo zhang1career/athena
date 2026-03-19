@@ -1,5 +1,11 @@
 # World Cup application config per DESIGN_SPECIFICATIONS §11
 application: worldcup
+
+# 小组第一预测：分组配置与数据来源
+prediction:
+  edition: 2026
+  groups_config: groups_2026.yaml  # 小组分组与赔率（applications/worldcup/config/ 下）
+  artifact_filename: worldcup_odds_group_winner.pkl  # 相关度 θ，位于 resources/artifacts/
 data:
   loader: applications.worldcup.data.loader.worldcup_data_loader
   split:
