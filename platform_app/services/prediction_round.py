@@ -310,6 +310,7 @@ def start_prediction_round(
     application: str = "worldcup",
     data_src_id: Optional[int] = None,
     data_file_version: Optional[int] = None,
+    data_file_versions: Optional[List[int]] = None,
     patch_batch_cts: Optional[List[int]] = None,
     incremental_update_data: Optional[Dict[str, Any]] = None,
     train_id: Optional[int] = None,
@@ -318,7 +319,7 @@ def start_prediction_round(
     """
     启动一轮预测：
     1) 若有 incremental_update_data，先保存为 data_patch_batch + data_patch，得到新 batch 的 ct
-    2) data_file_version = 传入值或当前时间
+    2) data_file_version / data_file_versions：多选时传 data_file_versions 列表，会合并多版本 records
     3) patch_batch_versions = patch_batch_cts + 新 batch ct（若有），按 ct 升序
     4) 调用 load_composed_records 得到数据源
     5) 若提供 train_id，用 Train 的 name/description 作为实验名称与 params.description，并生成数据质量 q 写入 params.q
@@ -334,7 +335,13 @@ def start_prediction_round(
         return {"error": check.get("error", "无法启动"), "suggestion": check.get("suggestion", "")}
 
     now = now_version_v()
-    data_file_v = data_file_version if data_file_version is not None and data_file_version > 0 else now
+    use_multi_version = isinstance(data_file_versions, list) and len(data_file_versions) > 0
+    if use_multi_version:
+        data_file_v_list = [int(x) for x in data_file_versions if x is not None]
+        data_file_v = max(data_file_v_list) if data_file_v_list else now
+    else:
+        data_file_v = data_file_version if data_file_version is not None and data_file_version > 0 else now
+        data_file_v_list = []
     selected_cts = list(patch_batch_cts or [])
 
     new_batch_ct = 0
@@ -346,13 +353,17 @@ def start_prediction_round(
 
     patch_batch_versions = sorted(set(selected_cts + ([new_batch_ct] if new_batch_ct else [])))
 
-    try:
-        composed_records, snapshot_ct, patch_count, envelope_meta = load_composed_records(
+    def _load():
+        return load_composed_records(
             data_src_id=data_src_id,
-            data_file_version=data_file_v,
+            data_file_version=data_file_v if not use_multi_version else None,
             patch_batch_versions=patch_batch_versions,
+            data_file_versions=data_file_v_list if use_multi_version else None,
         )
-        if not composed_records and snapshot_ct == 0:
+
+    try:
+        composed_records, snapshot_ct, patch_count, envelope_meta = _load()
+        if not composed_records and snapshot_ct == 0 and not use_multi_version:
             ds = DataSrc.objects.get(pk=data_src_id)
             resolved_url = (resolve_data_src_url(ds) or "").strip()
             if resolved_url:
@@ -361,8 +372,9 @@ def start_prediction_round(
                     save_full_snapshot(version_v=now, data_src_id=data_src_id)
                     composed_records, snapshot_ct, patch_count, envelope_meta = load_composed_records(
                         data_src_id=data_src_id,
-                        data_file_version=data_file_v,
+                        data_file_version=now,
                         patch_batch_versions=patch_batch_versions,
+                        data_file_versions=None,
                     )
     except Exception as e:
         logger.exception("Load composed records failed: %s", e)
@@ -425,6 +437,8 @@ def start_prediction_round(
         "task": task,
         "description": description,
     }
+    if data_file_v_list:
+        params["data_file_versions"] = data_file_v_list
     if train_id:
         params["train_id"] = train_id
     # 数据质量：程序为主、可选 AI；写入 run.data_q，并保留 params["q"] 兼容

@@ -201,7 +201,10 @@ function loadDataFileVersions(dataSrcId) {
         el.innerHTML = '<option value="" disabled>-- 该数据源暂无版本 --</option>';
         return;
       }
-      el.innerHTML = versions.map(function(v) { return '<option value="' + v.ct + '">ct=' + v.ct + '</option>'; }).join('');
+      el.innerHTML = versions.map(function(v) {
+        var label = (v.name && String(v.name).trim()) ? v.name : ('ct=' + v.ct);
+        return '<option value="' + v.ct + '">' + escapeHtml(label) + '</option>';
+      }).join('');
     })
     .catch(function() { el.innerHTML = '<option value="" disabled>-- 加载失败 --</option>'; });
 }

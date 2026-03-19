@@ -141,7 +141,7 @@ class StartPredictionRoundView(APIView):
     启动一轮预测：
     - data_src_id: 必填，原始数据（data_src 的 id）
     - data_file_version: 可选，单个原始数据版本（与 data_file_versions 二选一）
-    - data_file_versions: 可选，原始数据版本 ct 列表（多选）；若传则取 max 作为 data_file_version
+    - data_file_versions: 可选，原始数据版本 ct 列表（多选）；若传则合并多版本 records 参与实验
     - patch_batch_cts: 选中的 data_patch_batch 的 ct 列表
     - incremental_update_data: 可选，name-value 字典，保存为新 batch 后加入
     """
@@ -160,12 +160,10 @@ class StartPredictionRoundView(APIView):
             data_file_versions = data.get("data_file_versions") or []
             if isinstance(data_file_versions, list) and data_file_versions:
                 try:
-                    ct_list = [int(x) for x in data_file_versions if x is not None]
-                    if ct_list:
-                        data_file_version = max(ct_list)
+                    data_file_versions = [int(x) for x in data_file_versions if x is not None]
                 except (ValueError, TypeError):
-                    pass
-            if data_file_version is not None:
+                    data_file_versions = []
+            if not data_file_versions and data_file_version is not None:
                 try:
                     data_file_version = int(data_file_version)
                 except (ValueError, TypeError):
@@ -185,7 +183,8 @@ class StartPredictionRoundView(APIView):
             out = start_prediction_round(
                 application=application,
                 data_src_id=data_src_id,
-                data_file_version=data_file_version,
+                data_file_version=data_file_version if not data_file_versions else None,
+                data_file_versions=data_file_versions if data_file_versions else None,
                 patch_batch_cts=patch_batch_cts,
                 incremental_update_data=incremental_update_data,
                 train_id=train_id,
