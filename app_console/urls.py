@@ -7,6 +7,8 @@ from app_console.views import (
     DataSrcListView,
     DataSrcDetailView,
     RawDataManagementView,
+    TrainListView,
+    TrainDetailView,
     ExperimentCompareView,
     WorldCupAppView,
 )
@@ -23,4 +25,6 @@ urlpatterns = [
     path("data-srcs/", DataSrcListView.as_view(), name="data-src-list"),
     path("data-srcs/<int:pk>/", DataSrcDetailView.as_view(), name="data-src-detail"),
     path("raw-data/", RawDataManagementView.as_view(), name="raw-data"),
+    path("trains/", TrainListView.as_view(), name="train-list"),
+    path("trains/<int:pk>/", TrainDetailView.as_view(), name="train-detail"),
 ]

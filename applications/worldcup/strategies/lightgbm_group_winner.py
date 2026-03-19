@@ -5,7 +5,7 @@ from platform_core.strategy.base import Strategy, PredictResult, StrategySchema
 from platform_core.strategy.registry import register_strategy
 
 
-@register_strategy("lightgbm_group_winner")
+@register_strategy("lightgbm_group_winner", description="LightGBM 二分类，用于小组出线/冠军（is_winner 0/1）预测。")
 class LightGBMGroupWinnerStrategy(Strategy):
     """LightGBM binary classifier for group winner (is_winner 0/1)."""
 

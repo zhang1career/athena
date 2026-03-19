@@ -9,20 +9,9 @@ import logging
 import os
 from typing import Any, Dict, Optional
 
+from common.drivers.openai_driver import OpenAIDriver
+
 logger = logging.getLogger(__name__)
-
-
-def _get_openai_client():
-    """OpenAI 兼容 API 客户端。使用 AIGC_* 或 OPENAI_* 环境变量。"""
-    base_url = os.environ.get("AIGC_API_URL") or os.environ.get("OPENAI_API_BASE") or "https://api.openai.com/v1"
-    api_key = os.environ.get("AIGC_API_KEY") or os.environ.get("OPENAI_API_KEY") or ""
-    if not api_key:
-        return None, "未配置 AIGC_API_KEY 或 OPENAI_API_KEY"
-    try:
-        from openai import OpenAI
-        return OpenAI(base_url=base_url, api_key=api_key), None
-    except Exception as e:
-        return None, str(e)
 
 
 def _build_worldcup_context() -> str:
@@ -92,17 +81,17 @@ def get_recommendations(application: str = "worldcup") -> Dict[str, Any]:
         "---\n" + context
     )
 
-    client, err = _get_openai_client()
-    if err or not client:
+    driver = OpenAIDriver()
+    if not driver.is_available or not driver.client:
         return {
             "message": "当前未配置 AI API，无法生成建议。请配置 AIGC_API_KEY 或 OPENAI_API_KEY 后重试。",
             "requirements": None,
-            "error": err or "no client",
+            "error": "未配置 AIGC_API_KEY 或 OPENAI_API_KEY",
         }
 
     model = os.environ.get("AIGC_GPT_MODEL") or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
     try:
-        resp = client.chat.completions.create(
+        resp = driver.client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": "你只输出简短、直接的数据需求说明和可选的 JSON 块。"},

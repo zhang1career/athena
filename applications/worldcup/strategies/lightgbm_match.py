@@ -5,7 +5,7 @@ from platform_core.strategy.base import Strategy, PredictResult, StrategySchema
 from platform_core.strategy.registry import register_strategy
 
 
-@register_strategy("lightgbm_match")
+@register_strategy("lightgbm_match", description="LightGBM 分类器，用于比赛胜平负（1/X/2）预测。")
 class LightGBMMatchStrategy(Strategy):
     """LightGBM classifier for match result (1/X/2)."""
 

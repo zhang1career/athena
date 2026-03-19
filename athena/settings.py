@@ -75,7 +75,7 @@ DATABASES = {
         "PASSWORD": env("DB_PASSWORD", default=""),
         "HOST": env("DB_HOST", default="127.0.0.1"),
         "PORT": env("DB_PORT", default="3306"),
-        "OPTIONS": {"charset": "utf8mb4"},
+        "OPTIONS": {"charset": "utf8mb4", "connect_timeout": 5},
         "TEST": {"NAME": env("DB_TEST_NAME", default="athena_test")},
     }
 }

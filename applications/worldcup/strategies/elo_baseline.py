@@ -4,7 +4,7 @@ from platform_core.strategy.base import Strategy, PredictResult, StrategySchema
 from platform_core.strategy.registry import register_strategy
 
 
-@register_strategy("elo_baseline")
+@register_strategy("elo_baseline", description="基于 ELO 实力差的简单基线，用于比赛胜平负预测，无需训练。")
 class EloBaselineStrategy(Strategy):
     """Baseline: use f1-f2 ratio to predict 1/X/2. 0=home, 1=draw, 2=away."""
 

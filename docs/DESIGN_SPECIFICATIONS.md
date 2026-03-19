@@ -308,8 +308,8 @@ config/
 - **接口**：
   - `POST /api/v1/research/start-prediction-round`：启动一轮，创建带 `workflow_type=worldcup_round` 的实验并异步执行预测与 AI 建议，返回 `run_id`。
   - `POST /api/v1/experiments/{run_id}/confirm-improvements`：人工确认后执行改进，将阶段推进为「执行改进中」并标记「已完成」。
-- **流程状态**：通过实验的 `params.workflow_phase` 存储：`running` → `ai_suggestions_pending` → `improving` → `done`；`params.ai_suggestions` 存 AI 改进建议文案。
-- **展示**：实验管理 → 实验列表的列表项中增加「阶段」列，展示当前流程阶段（预测中 / AI建议待确认 / 执行改进中 / 已完成）；实验详情页在阶段为「AI建议待确认」时展示建议内容及「确认并执行改进」按钮。
+- **流程状态**：通过实验的 `params.workflow_phase` 存储：`running` → `ai_suggestions_pending` → `improving` → `done`；实验结果评价存于 `plat_exp_run.evaluation`。
+- **展示**：实验管理 → 实验列表的列表项中增加「阶段」列，展示当前流程阶段（预测中 / 实验结果评价待确认 / 执行改进中 / 已完成）；实验详情页在阶段为「实验结果评价待确认」时展示评价内容及「确认并执行改进」按钮。
 
 ---
 

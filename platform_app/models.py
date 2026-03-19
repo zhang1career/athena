@@ -17,7 +17,8 @@ class ExperimentRun(models.Model):
         CANCELLED = 4, "Cancelled"
 
     name = models.CharField(max_length=255)
-    strategy_id = models.CharField(max_length=128)
+    description = models.TextField(blank=True, default="", help_text="来自 Train.description 或空")
+    strategy = models.CharField(max_length=128)
     params = JSONTextField(default=dict, json_type=dict)
     data_config = JSONTextField(default=dict, json_type=dict)
     status = models.SmallIntegerField(
@@ -27,6 +28,8 @@ class ExperimentRun(models.Model):
     v = models.PositiveBigIntegerField(default=0, db_column="v", help_text="数据版本号，用于复现")
     metrics = JSONTextField(default=dict, json_type=dict)
     artifacts = JSONTextField(default=list, json_type=list)
+    data_q = JSONTextField(default=dict, json_type=dict, help_text="Data quality JSON: label_type, sample_count, positive_class, negative_class, balance, mean, variance, invalid_or_missing_count, class_counts (multiclass only).")
+    evaluation = models.TextField(blank=True, default="", help_text="实验结果评价（由 AI 生成，原 ai_suggestions）")
     ct = models.PositiveBigIntegerField(default=0, db_column="ct")
     ut = models.PositiveBigIntegerField(default=0, db_column="ut")
     error_message = models.TextField(blank=True)
@@ -257,4 +260,26 @@ class DataPatch(models.Model):
         ]
 
     def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+
+class Train(models.Model):
+    """训练科目：一轮预测时可选，用于实验名称、描述、策略及数据质量关联。"""
+
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    strategy = models.CharField(max_length=128, blank=True, default="")  # strategy_id from @register_strategy
+    ct = models.PositiveBigIntegerField(default=0, db_column="ct")
+    ut = models.PositiveBigIntegerField(default=0, db_column="ut")
+
+    class Meta:
+        db_table = "train"
+        ordering = ["-ct"]
+        app_label = "platform_app"
+
+    def save(self, *args, **kwargs):
+        now = int(time.time())
+        if not self.pk and self.ct == 0:
+            self.ct = now
+        self.ut = now
         super().save(*args, **kwargs)

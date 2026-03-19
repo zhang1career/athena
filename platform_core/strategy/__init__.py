@@ -8,6 +8,7 @@ from platform_core.strategy.registry import (
     get_strategy,
     list_strategies,
     get_strategy_schema,
+    get_strategy_description,
 )
 
 # Load built-in strategies so they get registered
@@ -21,4 +22,6 @@ __all__ = [
     "register_strategy",
     "get_strategy",
     "list_strategies",
+    "get_strategy_schema",
+    "get_strategy_description",
 ]

@@ -12,7 +12,11 @@
 <div class="card mb-6 border-l-4 border-l-green-500">
   <div class="card-body">
     <h3 class="text-lg font-semibold mb-2">一轮预测流程</h3>
-    <p class="text-gray-600 text-sm mb-3">选择原始数据、可选填写版本、勾选更新批次、可添加 name-value 后启动。若无 data_file 会尝试从数据源拉取创建。流程状态在「实验管理」中查看。</p>
+    <p class="text-gray-600 text-sm mb-3">选择训练科目（可选）与原始数据、可选填写版本、勾选更新批次、可添加 name-value 后启动。若无 data_file 会尝试从数据源拉取创建。流程状态在「实验管理」中查看。</p>
+    <label for="train-select" class="block text-sm font-medium text-gray-700 mb-1">训练科目</label>
+    <select id="train-select" class="border border-gray-300 rounded px-3 py-2 text-sm mb-2 w-full max-w-md">
+      <option value="">-- 请选择训练科目（可选） --</option>
+    </select>
     <label for="data-src-select" class="block text-sm font-medium text-gray-700 mb-1">原始数据</label>
     <select id="data-src-select" class="border border-gray-300 rounded px-3 py-2 text-sm mb-2 w-full max-w-md">
       <option value="">-- 请选择数据源 --</option>
@@ -26,41 +30,20 @@
     <label class="block text-sm font-medium text-gray-700 mb-1">更新数据（可添加多组 name-value，保存为本轮新 batch）</label>
     <div id="name-value-list" class="mb-2 space-y-2"></div>
     <button type="button" id="btn-add-name-value" class="btn btn-outline btn-sm mb-3">+ 添加 name-value</button>
-    <button type="button" id="btn-start-round" class="btn btn-primary">启动一轮预测</button>
+    <label class="block text-sm font-medium text-gray-700 mb-1 mt-2">数据质量</label>
+    <label class="inline-flex items-center gap-2 cursor-pointer"><input type="checkbox" id="quality-use-ai" class="rounded" /> 使用 AI 补充质量评价（可选）</label>
+    <div class="mt-3"><button type="button" id="btn-start-round" class="btn btn-primary">启动一轮预测</button></div>
     <div id="start-round-error" class="mt-3 hidden"></div>
     <div id="start-round-suggestion" class="mt-2 text-sm text-blue-600 hidden"></div>
   </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-  <div class="card">
-    <div class="card-body">
-      <h3 class="text-lg font-semibold mb-2">数据概况</h3>
-      <p class="text-gray-600 text-sm mb-2">数据源由配置文件定义（CSV/JSON/API）</p>
-      <p class="font-mono text-xs text-gray-500">applications/worldcup/config/</p>
-      <p class="text-xs text-gray-500 mt-2">config/data_sources.yaml</p>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-body">
-      <h3 class="text-lg font-semibold mb-2">可用策略</h3>
-      <ul class="text-sm text-gray-600 space-y-1">
-        <li>• lightgbm_match（比赛胜平负）</li>
-        <li>• elo_baseline（比赛胜平负）</li>
-        <li>• lightgbm_group_winner（小组出线）</li>
-      </ul>
-    </div>
-  </div>
-  <div class="card">
-    <div class="card-body">
-      <h3 class="text-lg font-semibold mb-2">快速操作</h3>
-      <select id="strategy-select" class="border border-gray-300 rounded px-3 py-2 text-sm mb-2 w-full">
-        <option value="lightgbm_match">lightgbm_match</option>
-        <option value="elo_baseline">elo_baseline</option>
-        <option value="lightgbm_group_winner">lightgbm_group_winner</option>
-      </select>
-      <button id="btn-create" class="btn btn-primary w-full">新建实验</button>
-    </div>
+<div class="card mb-6">
+  <div class="card-body">
+    <h3 class="text-lg font-semibold mb-2">数据概况</h3>
+    <p class="text-gray-600 text-sm mb-2">数据源由配置文件定义（CSV/JSON/API）</p>
+    <p class="font-mono text-xs text-gray-500">applications/worldcup/config/</p>
+    <p class="text-xs text-gray-500 mt-2">config/data_sources.yaml</p>
   </div>
 </div>
 
@@ -132,7 +115,7 @@ async function loadExperiments() {
         h += `<tr>
           ${(window.listIdCell || listIdCell)(x.id, detailUrl)}
           ${(window.listPlainCell || listPlainCell)(nameDisplay)}
-          <td>${escapeHtml(x.strategy_id || '-')}</td>
+          <td>${escapeHtml(x.strategy || '-')}</td>
           <td><span class="badge ${statusClass}">${escapeHtml(x.status)}</span></td>
           <td class="text-xs">${escapeHtml(phaseLabel)}</td>
           <td class="text-xs">${escapeHtml(metrics)}</td>
@@ -144,27 +127,12 @@ async function loadExperiments() {
       if (total > items.length) h += `<p class="px-4 py-2 text-sm text-gray-500">共 ${total} 条（仅展示世界杯相关策略）</p>`;
       el.innerHTML = h;
     } else {
-      el.innerHTML = '<div class="empty-state"><p>暂无世界杯预测实验</p><p class="text-sm mt-2">点击上方「新建实验」创建</p></div>';
+      el.innerHTML = '<div class="empty-state"><p>暂无世界杯预测实验</p><p class="text-sm mt-2">在「一轮预测流程」中启动预测后，实验将出现在此列表</p></div>';
     }
   } catch (e) {
     el.innerHTML = '<div class="p-8 text-center text-red-500">加载失败: ' + escapeHtml(e.message) + '</div>';
   }
 }
-
-document.getElementById('btn-create').onclick = function() {
-  const strategyId = document.getElementById('strategy-select').value;
-  fetch(API, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('input[name=csrfmiddlewaretoken]')?.value || '' },
-    body: JSON.stringify({ name: '世界杯预测实验', strategy_id: strategyId }),
-    credentials: 'same-origin'
-  }).then(r => r.json()).then(j => {
-    if (j.errorCode === 0) {
-      if (typeof showToast === 'function') showToast('已创建 id: ' + j.data.id, 'success');
-      loadExperiments();
-    } else alert(j.message || '创建失败');
-  }).catch(e => alert('创建失败: ' + e.message));
-};
 
 loadExperiments();
 
@@ -184,6 +152,23 @@ function loadPatchBatches() {
     }).catch(function(e) { el.innerHTML = '<span class="text-red-500">' + escapeHtml(e.message) + '</span>'; });
 }
 loadPatchBatches();
+
+function loadTrains() {
+  var el = document.getElementById('train-select');
+  if (!el) return;
+  fetch('/api/v1/trains', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(j) {
+      if (j.errorCode !== 0) return;
+      var items = (j.data && j.data.trains) || [];
+      el.innerHTML = '<option value="">-- 请选择训练科目（可选） --</option>' +
+        items.map(function(x) {
+          var label = (x.name && x.name.trim()) ? x.name : ('ID ' + x.id);
+          return '<option value="' + x.id + '">' + escapeHtml(label) + '</option>';
+        }).join('');
+    }).catch(function() {});
+}
+loadTrains();
 
 function loadDataSrcs() {
   var el = document.getElementById('data-src-select');
@@ -271,13 +256,18 @@ document.getElementById('btn-start-round').onclick = function() {
   sugEl.classList.add('hidden');
   var dataSrcId = dataSrcSelect ? parseInt(dataSrcSelect.value, 10) : 0;
   var selectedVersions = versionSelect ? Array.from(versionSelect.selectedOptions).map(function(opt) { return parseInt(opt.value, 10); }).filter(function(n) { return !isNaN(n); }) : [];
+  var trainSelect = document.getElementById('train-select');
+  var trainId = trainSelect && trainSelect.value ? parseInt(trainSelect.value, 10) : null;
+  var qualityUseAi = document.getElementById('quality-use-ai') && document.getElementById('quality-use-ai').checked;
   var payload = {
     application: 'worldcup',
     patch_batch_cts: Array.from(document.querySelectorAll('.patch-batch-ct:checked')).map(function(cb) { return parseInt(cb.value, 10); }),
-    incremental_update_data: collectNameValueDict()
+    incremental_update_data: collectNameValueDict(),
+    quality_use_ai: qualityUseAi
   };
   if (dataSrcId) payload.data_src_id = dataSrcId;
   if (selectedVersions.length > 0) payload.data_file_versions = selectedVersions;
+  if (trainId) payload.train_id = trainId;
   btn.disabled = true;
   fetch('/api/v1/research/start-prediction-round', {
     method: 'POST',

@@ -40,7 +40,7 @@
     columns: [
       { key: 'id', label: 'id', type: 'id', detailUrlTemplate: function(r) { return '/console/experiments/' + r.id + '/'; } },
       { key: 'name', label: '名称', type: 'text', valueGetter: function(r) { return r.name || r.id || '-'; } },
-      { key: 'strategy_id', label: '策略', type: 'text' },
+      { key: 'strategy', label: '策略', type: 'text' },
       { key: 'status', label: '状态', type: 'badge', badgeMap: { SUCCESS: 'badge-success', RUNNING: 'badge-running' } },
       { key: 'workflow_phase_label', label: '阶段', type: 'text' },
       { key: 'metrics', label: '指标', type: 'truncate', truncateLen: 80 },
@@ -51,7 +51,7 @@
   document.getElementById('btn-create').onclick = function() {
     var strategyId = prompt('策略 ID (如 sklearn_rf, lightgbm):', 'sklearn_rf');
     if (!strategyId) return;
-    window.ConsoleApi.apiPost(API, { name: '新实验', strategy_id: strategyId })
+    window.ConsoleApi.apiPost(API, { name: '新实验', strategy: strategyId })
       .then(function(data) {
         if (typeof showToast === 'function') showToast('已创建 id: ' + data.id, 'success');
         ConsoleListPage.refresh();

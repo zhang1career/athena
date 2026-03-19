@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from common.utils.http_util import resp_ok, resp_err, resp_exception
 from common.consts.response_const import RET_RESOURCE_NOT_FOUND
 
-from platform_core.strategy import list_strategies, get_strategy_schema
+from platform_core.strategy import list_strategies, get_strategy_schema, get_strategy_description
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ class StrategySchemaView(APIView):
             "name": schema.name,
             "version": schema.version,
             "params_schema": schema.params_schema,
+            "description": get_strategy_description(strategy_id),
         }
         if hasattr(schema, "supported_tasks") and schema.supported_tasks:
             payload["supported_tasks"] = schema.supported_tasks

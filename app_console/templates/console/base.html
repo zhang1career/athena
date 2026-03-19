@@ -7,6 +7,7 @@
     <title>{% block title %}控制台{% endblock %} - Athena</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{% static_ver 'console/css/style.css' %}">
+    <link rel="stylesheet" href="{% static_ver 'console/css/theme.css' %}">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="min-h-screen text-sm">
@@ -51,6 +52,12 @@
                     <a href="{% url 'console:raw-data' %}"
                        class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 {% if 'raw-data' in request.path %}bg-gray-700{% endif %}">
                         <span class="ml-3">原始数据</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="{% url 'console:train-list' %}"
+                       class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 {% if 'train' in request.path %}bg-gray-700{% endif %}">
+                        <span class="ml-3">训练科目</span>
                     </a>
                 </li>
                 <li>

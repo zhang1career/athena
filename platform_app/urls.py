@@ -5,6 +5,7 @@ from platform_app.api.views.experiment_views import (
     ExperimentDetailView,
     ExperimentCancelView,
     ExperimentConfirmImprovementsView,
+    ExperimentRefreshSuggestionsView,
 )
 from platform_app.api.views.strategy_views import StrategyListView, StrategySchemaView
 from platform_app.api.views.research_views import (
@@ -23,12 +24,15 @@ from platform_app.api.views.raw_data_file_views import (
     RawDataFileListView,
     RawDataFileCleanView,
 )
+from platform_app.api.views.train_views import TrainListCreateView, TrainDetailView
 
 urlpatterns = [
     path("experiments", ExperimentListCreateView.as_view()),
-    path("experiments/<int:pk>", ExperimentDetailView.as_view()),
-    path("experiments/<int:pk>/cancel", ExperimentCancelView.as_view()),
+    # 带子路径的须放在 experiments/<int:pk> 之前，否则会被 detail 抢匹配
+    path("experiments/<int:pk>/refresh-suggestions", ExperimentRefreshSuggestionsView.as_view()),
     path("experiments/<int:pk>/confirm-improvements", ExperimentConfirmImprovementsView.as_view()),
+    path("experiments/<int:pk>/cancel", ExperimentCancelView.as_view()),
+    path("experiments/<int:pk>", ExperimentDetailView.as_view()),
     path("strategies", StrategyListView.as_view()),
     path("strategies/<str:strategy_id>/schema", StrategySchemaView.as_view()),
     path("research/propose", ResearchProposeView.as_view()),
@@ -41,4 +45,6 @@ urlpatterns = [
     path("data-srcs/<int:pk>", DataSrcDetailView.as_view()),
     path("raw-data-files", RawDataFileListView.as_view()),
     path("raw-data-files/<int:pk>/clean", RawDataFileCleanView.as_view()),
+    path("trains", TrainListCreateView.as_view()),
+    path("trains/<int:pk>", TrainDetailView.as_view()),
 ]
