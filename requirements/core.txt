@@ -1,0 +1,16 @@
+# 与 APP_WORLD_CUP_ENABLED 等轻量 API 对齐的核心依赖（无 pandas / LightGBM）
+# 全量安装请用仓库根目录 requirements.txt（core + lab）
+
+requests>=2.28.0
+
+Django==4.1.13
+djangorestframework>=3.14.0
+django-cors-headers>=4.0.0
+drf-spectacular>=0.27.0
+django-environ>=0.11.0
+
+pymysql>=1.1.0
+
+numpy>=1.24.0
+PyYAML>=6.0
+joblib>=1.3.0

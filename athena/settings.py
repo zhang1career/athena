@@ -20,9 +20,13 @@ DEBUG = env.bool("DEBUG", default=True)
 allowed_hosts_raw = os.environ.get("ALLOWED_HOSTS") or env("ALLOWED_HOSTS", default="localhost,127.0.0.1")
 ALLOWED_HOSTS = ["*"] if allowed_hosts_raw == "*" else [h.strip() for h in str(allowed_hosts_raw).split(",") if h.strip()]
 
+# App enable switches（与 service_foundation 的 APP_*_ENABLED 同风格；影响 INSTALLED_APPS、URL、建议的 requirements）
+APP_CONSOLE_ENABLED = env.bool("APP_CONSOLE_ENABLED", default=True)
+APP_WORLD_CUP_ENABLED = env.bool("APP_WORLD_CUP_ENABLED", default=True)
+APP_PLATFORM_LAB_ENABLED = env.bool("APP_PLATFORM_LAB_ENABLED", default=True)
+
 # Application definition
 INSTALLED_APPS = [
-    "app_console",
     "platform_app",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -34,6 +38,8 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_spectacular",
 ]
+if APP_CONSOLE_ENABLED:
+    INSTALLED_APPS.insert(0, "app_console")
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
@@ -48,19 +54,24 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "athena.urls"
 
+_template_dirs = []
+_template_context_processors = [
+    "django.template.context_processors.debug",
+    "django.template.context_processors.request",
+    "django.contrib.auth.context_processors.auth",
+    "django.contrib.messages.context_processors.messages",
+]
+if APP_CONSOLE_ENABLED:
+    _template_dirs.append(BASE_DIR / "app_console" / "templates")
+    _template_context_processors.append("app_console.context_processors.console_context")
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "app_console" / "templates"],
+        "DIRS": _template_dirs,
         "APP_DIRS": True,
         "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.debug",
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-                "app_console.context_processors.console_context",
-            ],
+            "context_processors": _template_context_processors,
         },
     },
 ]
