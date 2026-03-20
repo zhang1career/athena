@@ -21,14 +21,19 @@ cp .env.example .env
 # 迁移
 python manage.py migrate
 
-# 启动服务
+# 启动服务（本地调试，前台）
 python manage.py runserver
 ```
+
+### 服务器部署
+
+后台启停、写 PID 与日志时使用项目根目录的 `run.sh`（`start` / `stop` / `restart` / `status`），详见脚本顶部说明。部署环境可在 `.env` 中设置 `APP_NAME`、`LOG_FILE_PATH` 等。
 
 ## 访问
 
 - Dashboard: http://127.0.0.1:8000/console/
 - API: http://127.0.0.1:8000/api/v1/
+- **API 文档 (Swagger)**: http://127.0.0.1:8000/api/schema/swagger-ui/
 
 ## API 端点
 
@@ -41,6 +46,9 @@ python manage.py runserver
 | GET | /api/v1/strategies | 策略列表 |
 | GET | /api/v1/strategies/{id}/schema | 策略参数 schema |
 | POST | /api/v1/research/propose | AI Research Loop 提议 |
+| GET | /api/v1/worldcup/group-winner-prediction | 世界杯小组赛第一名预测 |
+
+> 完整 API 文档见 [Swagger UI](/api/schema/swagger-ui/)
 
 ## 项目结构
 

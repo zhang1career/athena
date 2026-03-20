@@ -23,7 +23,6 @@ ALLOWED_HOSTS = ["*"] if allowed_hosts_raw == "*" else [h.strip() for h in str(a
 # Application definition
 INSTALLED_APPS = [
     "app_console",
-    "app_frontend",
     "platform_app",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -33,6 +32,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
+    "drf_spectacular",
 ]
 
 MIDDLEWARE = [
@@ -113,6 +113,19 @@ SNOWFLAKE_ID_URL = os.environ.get("SNOWFLAKE_ID_URL", "")
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
+
+# REST Framework
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# OpenAPI / Swagger (drf-spectacular)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Athena Prediction API",
+    "DESCRIPTION": "预测平台 API，包含世界杯小组赛预测等接口。",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
 
 # Logging
 LOGGING = {
