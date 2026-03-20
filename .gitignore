@@ -11,3 +11,6 @@ staticfiles/
 .venv/
 venv/
 db.sqlite3
+
+resources/data/
+

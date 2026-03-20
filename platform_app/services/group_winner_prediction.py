@@ -59,12 +59,12 @@ def compute_group_winner_prediction(artifact_path: Optional[Path] = None) -> Dic
         }
     """
     from applications.worldcup.config import load_groups_config
-    from applications.worldcup.strategies.odds_baseline_group_winner import (
-        _normalize_implied_proba_by_group,
-        PROBA_MIN,
+    from applications.worldcup.proba_group import (
         PROBA_MAX,
+        PROBA_MIN,
+        normalize_implied_proba_by_group,
     )
-    from platform_core.fusion import fuse_with_unified_metric_normalization
+    from platform_core.fusion.unified_fusion import fuse_with_unified_metric_normalization
 
     # 1. 从配置文件加载分组与赔率（applications/worldcup/config/groups_*.yaml）
     groups, teams, odds_list, edition = load_groups_config()
@@ -75,7 +75,7 @@ def compute_group_winner_prediction(artifact_path: Optional[Path] = None) -> Dic
 
     # 2. 构建中间结果列表（可扩展：添加 LightGBM、ELO 等）
     # 赔率：按组归一化
-    proba_odds = _normalize_implied_proba_by_group(odds_proba_raw, groups)
+    proba_odds = normalize_implied_proba_by_group(odds_proba_raw, groups)
     proba_odds = np.clip(proba_odds, PROBA_MIN, PROBA_MAX)
 
     # 3. 从 resources/artifacts/ 加载相关度 θ

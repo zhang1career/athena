@@ -1,33 +1,14 @@
 """赔率基线策略：预测值 = 某档赔率的隐含概率。相关度 θ（与真实结果的 AUC/Brier 等）视为训练结果，保存到 artifact，参与融合权重与预测计算。"""
 import numpy as np
-import pandas as pd
+from applications.worldcup.proba_group import (
+    PROBA_MAX,
+    PROBA_MIN,
+    normalize_implied_proba_by_group as _normalize_implied_proba_by_group,
+)
 from platform_core.strategy.base import Strategy, PredictResult, StrategySchema
 from platform_core.strategy.registry import register_strategy
 
-# 概率裁剪边界，避免 log_loss 因 0/1 极值爆炸
-PROBA_EPS = 1e-6
-PROBA_MIN = PROBA_EPS
-PROBA_MAX = 1.0 - PROBA_EPS
-
-
-def _normalize_implied_proba_by_group(
-    proba_positive: np.ndarray,
-    group_ids: list,
-) -> np.ndarray:
-    """按组去水并归一化：同组内隐含概率之和通常>1，归一化使组内和为1。"""
-    out = np.asarray(proba_positive, dtype=float).copy()
-    if not group_ids or len(group_ids) != len(out):
-        return out
-    uniq = sorted(set(g for g in group_ids if g != ""))
-    for g in uniq:
-        idx = [i for i, x in enumerate(group_ids) if x == g]
-        if not idx:
-            continue
-        s = out[idx].sum()
-        if s > 0:
-            out[idx] = out[idx] / s
-        # 若 s<=0 则保持原值，后续会 clip
-    return out
+PROBA_EPS = PROBA_MIN
 
 
 @register_strategy(
@@ -105,9 +86,6 @@ class OddsBaselineGroupWinnerStrategy(Strategy):
             proba_positive = np.clip(proba_positive, PROBA_MIN, PROBA_MAX)
         proba = np.column_stack([1 - proba_positive, proba_positive])
         preds = (proba_positive >= 0.5).astype(int)
-        # 兼容 DataFrame（与平台其他策略一致）
-        if hasattr(X, "columns") and X.shape[1] == len(X.columns):
-            X = pd.DataFrame(X, columns=X.columns)
         return PredictResult(predictions=preds, proba=proba, metadata={"odds_proba": proba_positive.tolist()})
 
     def get_params(self) -> dict:

@@ -1,3 +1,4 @@
+"""实验 / 策略 / 研究 / 数据 / 训练等平台 API（重依赖：pandas、LightGBM 等）。由 APP_PLATFORM_LAB_ENABLED 控制是否挂载。"""
 from django.urls import path
 
 from platform_app.api.views.experiment_views import (
@@ -25,12 +26,10 @@ from platform_app.api.views.raw_data_file_views import (
     RawDataFileCleanView,
 )
 from platform_app.api.views.train_views import TrainListCreateView, TrainDetailView
-from platform_app.api.views.worldcup_views import GroupWinnerPredictionView
 from platform_app.api.views.artifact_views import ArtifactDetailView
 
 urlpatterns = [
     path("experiments", ExperimentListCreateView.as_view()),
-    # 带子路径的须放在 experiments/<int:pk> 之前，否则会被 detail 抢匹配
     path("experiments/<int:pk>/refresh-suggestions", ExperimentRefreshSuggestionsView.as_view()),
     path("experiments/<int:pk>/confirm-improvements", ExperimentConfirmImprovementsView.as_view()),
     path("experiments/<int:pk>/cancel", ExperimentCancelView.as_view()),
@@ -49,6 +48,5 @@ urlpatterns = [
     path("raw-data-files/<int:pk>/clean", RawDataFileCleanView.as_view()),
     path("trains", TrainListCreateView.as_view()),
     path("trains/<int:pk>", TrainDetailView.as_view()),
-    path("worldcup/group-winner-prediction", GroupWinnerPredictionView.as_view()),
     path("artifacts", ArtifactDetailView.as_view()),
 ]
