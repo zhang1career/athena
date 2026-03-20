@@ -25,7 +25,7 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Strategy–Task 绑定                                                  │
 │  - lightgbm_match: 支持 task=match_1x2                              │
-│  - lightgbm_group_winner: 支持 task=group_winner                    │
+│  - odds_baseline_group_winner: 支持 task=group_winner               │
 │  - elo_baseline: 支持 task=match_1x2                                 │
 └─────────────────────────────────────────────────────────────────────┘
                                     │
@@ -103,7 +103,7 @@ def worldcup_data_loader(data_config):
 | 阶段 | 内容 | 说明 |
 |------|------|------|
 | P0 | 增加 group_winner schema 与 loader | 支持当前赔率数据 |
-| P0 | 新增 lightgbm_group_winner 策略 | 二分类预测小组冠军 |
+| P0 | 赔率基线 odds_baseline_group_winner + 融合权重由相关度 θ 推导 | 小组出线用赔率相关度，见 FUSION_ODDS_CORRELATION_WEIGHT.md |
 | P1 | StrategySchema 增加 supported_tasks | 校验策略与任务匹配 |
 | P2 | Loader 注册表 | 按 data_type 动态选择 loader |
 | P2 | 统一评估接口 | 二分类用 accuracy/auc，多分类用 accuracy，可扩展 |
@@ -139,5 +139,12 @@ def worldcup_data_loader(data_config):
   - `group_winner`：小组出线/小组第一（每队每组一行，二分类）；  
   - 未来如 `final_winner`：决赛冠军（赛会制、淘汰赛逻辑，与小组机制不同）。  
   比赛机制、影响因素、样本粒度都不同，因此先区分为不同 **task**，再在各自 task 下挂载策略。
-- **策略**：每个策略通过 `supported_tasks` 声明自己支持哪些 task（如 `lightgbm_match` 支持 `match_1x2`，`lightgbm_group_winner` 支持 `group_winner`）。  
+- **策略**：每个策略通过 `supported_tasks` 声明自己支持哪些 task（如 `lightgbm_match` 支持 `match_1x2`，`odds_baseline_group_winner` 支持 `group_winner`）。  
   「启动一轮预测」时：**先由数据（信封中的 task）确定命题，再在该命题下选用或自动匹配策略**，而不是用同一策略处理所有数据。
+
+### 6.3 策略增删与耦合（少改文件）
+
+- **单一来源**：世界杯应用下的策略列表以 `applications/worldcup/config/config.yaml` 的 `strategies` 为准；控制台页面的「实验列表」筛选、下拉展示均由此配置提供，不再在模板或视图中硬编码策略 ID。
+- **自动注册**：`applications/worldcup/strategies/` 下所有 `.py` 模块在导入包时自动加载并执行 `@register_strategy`，无需在 `strategy_views.py` 中逐个 import。
+- **动态建议**：一轮预测时若任务无可用策略，提示文案中的「支持某 task 的策略」由 `list_strategies()` 按 `supported_tasks` 过滤生成，不写死策略名。
+- **增删策略**：新增策略 = 在 `strategies/` 下新增一个 `.py` 并在 `config.yaml` 的 `strategies` 中追加其 id；删除策略 = 删除或移出该 `.py` 并从 `config.yaml` 中移除 id。无需改 `strategy_views.py`、模板或 `prediction_round` 的提示文案。
