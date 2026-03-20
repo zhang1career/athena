@@ -18,6 +18,8 @@
     <div class="space-y-3">
       <label class="block text-sm font-medium text-gray-700">名称</label>
       <input id="modal-name" type="text" class="border border-gray-300 rounded px-3 py-2 w-full" placeholder="训练科目名称" />
+      <label class="block text-sm font-medium text-gray-700">代码</label>
+      <input id="modal-code" type="text" class="border border-gray-300 rounded px-3 py-2 w-full" placeholder="训练科目编码，用于模型保存路径 artifacts/&lt;code&gt;.pkl" />
       <label class="block text-sm font-medium text-gray-700">策略</label>
       <select id="modal-strategy" class="border border-gray-300 rounded px-3 py-2 w-full">
         <option value="">-- 请选择策略（可选） --</option>
@@ -44,7 +46,7 @@
   var esc = function(s) { return window.ConsoleApi && window.ConsoleApi.escapeHtml ? window.ConsoleApi.escapeHtml(s) : (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')); };
   window.editTrain = function(id) {
     window.ConsoleApi.apiGet(API + '/' + id).then(function(d) {
-      openModal(id, d.name || '', d.strategy || '', d.description || '');
+      openModal(id, d.name || '', d.code || '', d.strategy || '', d.description || '');
     }).catch(function(e) { alert(e.message || '加载失败'); });
   };
   window.doDeleteTrain = function(id) {
@@ -64,6 +66,7 @@
     columns: [
       { key: 'id', label: 'ID', type: 'id', detailUrlTemplate: function(r) { return '/console/trains/' + r.id + '/'; } },
       { key: 'name', label: '名称', type: 'text' },
+      { key: 'code', label: '代码', type: 'text' },
       { key: 'strategy', label: '策略', type: 'text' },
       { key: 'description', label: '描述', type: 'truncate', truncateLen: 60 },
       { key: 'ct', label: '创建时间', type: 'text' },
@@ -73,10 +76,11 @@
       onDelete: 'doDeleteTrain',
     },
   });
-  function openModal(id, name, strategy, description) {
+  function openModal(id, name, code, strategy, description) {
     var modal = document.getElementById('modal-edit');
     var title = document.getElementById('modal-title');
     document.getElementById('modal-name').value = name || '';
+    document.getElementById('modal-code').value = code || '';
     var sel = document.getElementById('modal-strategy');
     if (sel) sel.value = strategy || '';
     document.getElementById('modal-description').value = description || '';
@@ -103,12 +107,13 @@
     var modal = document.getElementById('modal-edit');
     var editId = modal.dataset.editId;
     var name = document.getElementById('modal-name').value.trim();
+    var code = (document.getElementById('modal-code') && document.getElementById('modal-code').value.trim()) || '';
     var strategy = (document.getElementById('modal-strategy') && document.getElementById('modal-strategy').value) || '';
     var description = (document.getElementById('modal-description') && document.getElementById('modal-description').value) || '';
     if (!name) { alert('请输入名称'); return; }
     var isEdit = editId && editId !== '0';
     var url = isEdit ? API + '/' + editId : API;
-    var payload = { name: name, strategy: strategy, description: description };
+    var payload = { name: name, code: code, strategy: strategy, description: description };
     var req = isEdit ? window.ConsoleApi.apiPut(url, payload) : window.ConsoleApi.apiPost(url, payload);
     req.then(function() {
       if (typeof showToast === 'function') showToast(isEdit ? '已更新' : '已创建', 'success');
@@ -116,7 +121,7 @@
       ConsoleListPage.refresh();
     }).catch(function(e) { alert(e.message || '保存失败'); });
   }
-  document.getElementById('btn-add').onclick = function() { openModal(null, '', '', ''); };
+  document.getElementById('btn-add').onclick = function() { openModal(null, '', '', '', ''); };
   document.getElementById('modal-cancel').onclick = closeModal;
   document.getElementById('modal-save').onclick = doSave;
   document.getElementById('modal-edit').onclick = function(e) { if (e.target === this) closeModal(); };

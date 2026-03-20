@@ -1,0 +1,76 @@
+# 世界杯 2022（卡塔尔）小组分组配置（原硬编码数据存放位置）
+# 数据原位于 platform_app/services/group_winner_prediction.py 的 HARDCODED_GROUP_WINNER_ODDS
+edition: 2022
+groups:
+  A:
+    - team: Netherlands
+      odds: 0.45
+    - team: Ecuador
+      odds: 0.25
+    - team: Senegal
+      odds: 0.20
+    - team: Qatar
+      odds: 0.10
+  B:
+    - team: England
+      odds: 0.55
+    - team: USA
+      odds: 0.25
+    - team: Wales
+      odds: 0.12
+    - team: Iran
+      odds: 0.08
+  C:
+    - team: Argentina
+      odds: 0.60
+    - team: Poland
+      odds: 0.20
+    - team: Mexico
+      odds: 0.15
+    - team: Saudi Arabia
+      odds: 0.05
+  D:
+    - team: France
+      odds: 0.58
+    - team: Denmark
+      odds: 0.22
+    - team: Tunisia
+      odds: 0.12
+    - team: Australia
+      odds: 0.08
+  E:
+    - team: Spain
+      odds: 0.50
+    - team: Germany
+      odds: 0.35
+    - team: Japan
+      odds: 0.10
+    - team: Costa Rica
+      odds: 0.05
+  F:
+    - team: Belgium
+      odds: 0.48
+    - team: Croatia
+      odds: 0.28
+    - team: Morocco
+      odds: 0.14
+    - team: Canada
+      odds: 0.10
+  G:
+    - team: Brazil
+      odds: 0.65
+    - team: Switzerland
+      odds: 0.20
+    - team: Serbia
+      odds: 0.10
+    - team: Cameroon
+      odds: 0.05
+  H:
+    - team: Portugal
+      odds: 0.52
+    - team: Uruguay
+      odds: 0.28
+    - team: South Korea
+      odds: 0.12
+    - team: Ghana
+      odds: 0.08

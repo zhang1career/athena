@@ -61,12 +61,24 @@
                     </a>
                 </li>
                 <li>
+                    <a href="{% url 'console:artifact-view' %}"
+                       class="flex items-center px-4 py-3 rounded-lg hover:bg-gray-700 {% if 'artifacts' in request.path %}bg-gray-700{% endif %}">
+                        <span class="ml-3">Artifacts</span>
+                    </a>
+                </li>
+                <li>
                     <div class="px-4 py-2 mt-2 text-gray-400 text-xs font-medium uppercase tracking-wider">应用</div>
                     <ul class="space-y-0.5">
                         <li>
                             <a href="{% url 'console:worldcup-app' %}"
-                               class="flex items-center px-4 py-2.5 rounded-lg hover:bg-gray-700 pl-8 {% if 'worldcup' in request.path %}bg-gray-700{% endif %}">
-                                <span>世界杯预测</span>
+                               class="flex items-center px-4 py-2.5 rounded-lg hover:bg-gray-700 pl-8 {% if 'console/worldcup' in request.path %}bg-gray-700{% endif %}">
+                                <span>世界杯预测（控制台）</span>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="{% url 'frontend:worldcup-app' %}"
+                               class="flex items-center px-4 py-2.5 rounded-lg hover:bg-gray-700 pl-8 {% if 'apps/worldcup' in request.path %}bg-gray-700{% endif %}">
+                                <span>世界杯应用</span>
                             </a>
                         </li>
                     </ul>

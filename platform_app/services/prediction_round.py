@@ -4,6 +4,7 @@
 import json
 import logging
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -273,17 +274,31 @@ def fetch_and_save_improvement_suggestions(run_id: int) -> None:
 
 def _run_round_async(run_id: int, config: ExperimentConfig):
     try:
-        # Set artifact_dir so the runner can save the trained model
+        # Set artifact path: artifacts/<model_name>.pkl where model_name = Train.code (fallback: run_id)
         try:
             from django.conf import settings
-            resource_root = getattr(settings, "RESOURCE_ROOT", None) or os.path.join(
-                Path(__file__).resolve().parent.parent.parent, "resources"
-            )
-            artifact_dir = os.path.join(resource_root, "artifacts", "runs", str(run_id))
+            resource_root = getattr(settings, "RESOURCE_ROOT", None) or str(Path(settings.BASE_DIR) / "resources")
+            artifact_dir = os.path.join(resource_root, "artifacts")
+            model_name = str(run_id)
+            train_id = (config.params or {}).get("train_id")
+            if train_id:
+                try:
+                    from platform_app.models import Train
+                    train = Train.objects.filter(pk=train_id).first()
+                    if train and (train.code or "").strip():
+                        model_name = (train.code or "").strip()
+                except Exception:
+                    pass
+            # Sanitize filename: only alphanumeric, underscore, hyphen
+            model_name = re.sub(r"[^\w\-]", "_", model_name) or str(run_id)
             os.makedirs(artifact_dir, exist_ok=True)
-            config.data_config = dict(config.data_config or {}, artifact_dir=artifact_dir)
+            config.data_config = dict(
+                config.data_config or {},
+                artifact_dir=artifact_dir,
+                artifact_filename=f"{model_name}.pkl",
+            )
         except Exception as e:
-            logger.warning("Could not set artifact_dir for run %s: %s", run_id, e)
+            logger.warning("Could not set artifact path for run %s: %s", run_id, e)
 
         runner = get_runner(config.data_config)
         result = runner.run(config)

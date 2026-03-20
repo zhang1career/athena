@@ -1,0 +1,113 @@
+# 世界杯 2026 小组分组配置（12 组 × 4 队 = 48 队）
+# 数据来源：FIFA 2026 抽签结果
+# odds: 小组第一的赔率隐含概率（示例值，需随盘口更新）
+edition: 2026
+groups:
+  A:
+    - team: Mexico
+      odds: 0.35
+    - team: South Korea
+      odds: 0.30
+    - team: South Africa
+      odds: 0.20
+    - team: UEFA playoff D  # Denmark / Czechia / Ireland / North Macedonia
+      odds: 0.15
+  B:
+    - team: Canada
+      odds: 0.40
+    - team: Switzerland
+      odds: 0.30
+    - team: Qatar
+      odds: 0.18
+    - team: UEFA playoff A  # Italy / Wales / Bosnia / Northern Ireland
+      odds: 0.12
+  C:
+    - team: Brazil
+      odds: 0.55
+    - team: Morocco
+      odds: 0.22
+    - team: Scotland
+      odds: 0.15
+    - team: Haiti
+      odds: 0.08
+  D:
+    - team: USA
+      odds: 0.45
+    - team: Paraguay
+      odds: 0.25
+    - team: Australia
+      odds: 0.18
+    - team: UEFA playoff C  # Turkiye / Slovakia / Kosovo / Romania
+      odds: 0.12
+  E:
+    - team: Germany
+      odds: 0.50
+    - team: Ecuador
+      odds: 0.22
+    - team: Ivory Coast
+      odds: 0.18
+    - team: Curacao
+      odds: 0.10
+  F:
+    - team: Netherlands
+      odds: 0.48
+    - team: Japan
+      odds: 0.25
+    - team: Tunisia
+      odds: 0.15
+    - team: UEFA playoff B  # Ukraine / Poland / Albania / Sweden
+      odds: 0.12
+  G:
+    - team: Belgium
+      odds: 0.45
+    - team: Iran
+      odds: 0.22
+    - team: Egypt
+      odds: 0.20
+    - team: New Zealand
+      odds: 0.13
+  H:
+    - team: Spain
+      odds: 0.50
+    - team: Uruguay
+      odds: 0.28
+    - team: Saudi Arabia
+      odds: 0.12
+    - team: Cape Verde
+      odds: 0.10
+  I:
+    - team: France
+      odds: 0.55
+    - team: Senegal
+      odds: 0.22
+    - team: Norway
+      odds: 0.15
+    - team: Inter-confed playoff 2  # Iraq / Bolivia / Suriname
+      odds: 0.08
+  J:
+    - team: Argentina
+      odds: 0.58
+    - team: Austria
+      odds: 0.20
+    - team: Algeria
+      odds: 0.14
+    - team: Jordan
+      odds: 0.08
+  K:
+    - team: Portugal
+      odds: 0.52
+    - team: Colombia
+      odds: 0.25
+    - team: Uzbekistan
+      odds: 0.13
+    - team: Inter-confed playoff 1  # DR Congo / Jamaica / New Caledonia
+      odds: 0.10
+  L:
+    - team: England
+      odds: 0.50
+    - team: Croatia
+      odds: 0.28
+    - team: Panama
+      odds: 0.12
+    - team: Ghana
+      odds: 0.10

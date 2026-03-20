@@ -121,6 +121,7 @@ fetch('/api/v1/experiments/' + experimentId)
           ${d.error_message ? '<p class="text-red-600"><strong>错误:</strong> ' + escapeHtml(d.error_message) + '</p>' : ''}
         </div>
       </div>
+      <div id="artifact-theta-card"></div>
       ${phaseHtml}
       ${suggestionsHtml}
       <div class="card">
@@ -132,6 +133,41 @@ fetch('/api/v1/experiments/' + experimentId)
         <div class="card-body"><pre class="text-sm overflow-x-auto">${escapeHtml(JSON.stringify(d.metrics || {}, null, 2))}</pre></div>
       </div>
     `;
+    // 赔率相关度 θ 可视化（odds_baseline_group_winner）
+    var artifactPath = (d.artifacts && d.artifacts[0] && d.artifacts[0].path) ? d.artifacts[0].path : (d.artifact_path_hint || null);
+    if (d.strategy === 'odds_baseline_group_winner' && artifactPath) {
+      var card = document.getElementById('artifact-theta-card');
+      card.innerHTML = '<p class="text-gray-500 p-4">加载 artifact 中…</p>';
+      fetch('/api/v1/artifacts?filename=' + encodeURIComponent(artifactPath), { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(j) {
+          if (j.errorCode !== 0) {
+            card.innerHTML = '<div class="card border-l-4 border-l-amber-200"><div class="card-body"><p class="text-amber-700 text-sm">无法加载 artifact: ' + escapeHtml(j.message || '未知错误') + '</p><p class="text-xs text-gray-500 mt-1">尝试路径: ' + escapeHtml(artifactPath) + '</p><a href="/console/artifacts/?filename=' + encodeURIComponent(artifactPath) + '" class="text-blue-600 text-sm">在 Artifacts 页查看</a></div></div>';
+            return;
+          }
+          var art = (j.data && j.data.artifact) || {};
+          var theta = art.theta || art;
+          if (!theta || typeof theta !== 'object') {
+            card.innerHTML = '<div class="card"><div class="card-body"><pre class="text-sm">' + escapeHtml(JSON.stringify(art, null, 2)) + '</pre></div></div>';
+            return;
+          }
+          var fmt = function(v) { return (typeof v === 'number') ? (v * 100).toFixed(1) + '%' : (v != null ? String(v) : '-'); };
+          var bar = function(label, value, maxVal) {
+            maxVal = maxVal != null ? maxVal : 1;
+            var pct = (typeof value === 'number' && maxVal > 0) ? Math.min(100, (value / maxVal) * 100) : 0;
+            return '<div class="mb-2"><div class="flex justify-between text-sm mb-0.5"><span class="text-gray-600">' + escapeHtml(label) + '</span><span class="font-medium">' + fmt(value) + '</span></div><div class="h-2 bg-gray-200 rounded overflow-hidden"><div class="h-full bg-blue-500 rounded" style="width:' + pct + '%"></div></div></div>';
+          };
+          card.innerHTML = '<div class="card border-l-4 border-l-amber-500"><div class="card-header"><h3 class="font-semibold">📊 赔率相关度 θ (artifact)</h3></div><div class="card-body">' +
+            bar('AUC', theta.auc, 1) +
+            bar('Brier (越小越好，0.25=随机)', 1 - (theta.brier || 0.25) / 0.25, 1) +
+            bar('Spearman 相关系数', (theta.spearman || 0) + 0.5, 1) +
+            bar('建议权重 suggested_weight', theta.suggested_weight, 1) +
+            '<p class="text-xs text-gray-500 mt-2">文件: ' + escapeHtml(artifactPath) + '</p><a href="/console/artifacts/?filename=' + encodeURIComponent(artifactPath) + '" class="text-blue-600 text-sm">在 Artifacts 页查看</a></div></div>';
+        })
+        .catch(function(e) {
+          card.innerHTML = '<div class="card border-l-4 border-l-amber-200"><div class="card-body"><p class="text-amber-700 text-sm">请求失败: ' + escapeHtml(e.message || '网络错误') + '</p><p class="text-xs text-gray-500 mt-1">路径: ' + escapeHtml(artifactPath) + '</p></div></div>';
+        });
+    }
     var btn = document.getElementById('btn-apply-improvements');
     if (btn) btn.onclick = applyImprovements;
     var btnRefresh = document.getElementById('btn-refresh-suggestions');

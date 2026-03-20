@@ -135,12 +135,29 @@ class ExperimentDetailView(APIView):
             line.strip() for line in (str(evaluation_raw or "").strip().split("\n"))
             if line.strip()
         ]
+        # 供 odds_baseline 可视化：若无 artifacts 则根据 train_id 推断 artifact 路径
+        artifact_path_hint = None
+        if run.strategy == "odds_baseline_group_winner":
+            arts = run.artifacts or []
+            if arts and isinstance(arts[0], dict) and arts[0].get("path"):
+                artifact_path_hint = arts[0]["path"]
+            elif params.get("train_id"):
+                try:
+                    from platform_app.models import Train
+                    t = Train.objects.filter(pk=params["train_id"]).first()
+                    if t and (t.code or "").strip():
+                        artifact_path_hint = (t.code or "").strip() + ".pkl"
+                except Exception:
+                    pass
+            if not artifact_path_hint:
+                artifact_path_hint = "worldcup_odds_group_winner.pkl"
         return resp_ok({
             "id": run.id,
             "name": run.name,
             "description": getattr(run, "description", "") or "",
             "strategy": run.strategy,
             "params": run.params,
+            "artifact_path_hint": artifact_path_hint,
             "data_config": run.data_config,
             "data_q": run.data_q,
             "status": run.status_label,

@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "corsheaders",
+    "drf_spectacular",
 ]
 
 MIDDLEWARE = [
@@ -101,12 +102,30 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # Default primary key
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Resource root for artifacts, data files (default: resources under project root)
+RESOURCE_ROOT = env("RESOURCE_ROOT", default="resources")
+if RESOURCE_ROOT and not os.path.isabs(RESOURCE_ROOT):
+    RESOURCE_ROOT = str(BASE_DIR / RESOURCE_ROOT)
+
 # Snowflake ID service (optional, for run_id generation)
 # e.g. SNOWFLAKE_ID_URL=http://localhost:18041/api/snowflake/id?bid=1002
 SNOWFLAKE_ID_URL = os.environ.get("SNOWFLAKE_ID_URL", "")
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True
+
+# REST Framework
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# OpenAPI / Swagger (drf-spectacular)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Athena Prediction API",
+    "DESCRIPTION": "预测平台 API，包含世界杯小组赛预测等接口。",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
 
 # Logging
 LOGGING = {
